@@ -108,8 +108,8 @@ namespace clib {
 
     private:
         string_t str;
-        int index{0};
-        int last_index{0};
+        uint index{0};
+        uint last_index{0};
         int length{0};
 
         lexer_t type{l_none};
@@ -164,6 +164,11 @@ namespace clib {
 #undef DEFINE_LEXER_STORAGE
         } storage;
 
+        // 字典
+        map_t<string_t, keyword_t> mapKeyword;
+
+        void initMap();
+
         // 正则表达式
         smatch_t sm;
         regex_t r_string{R"(([^\\])|(?:\\(?:([bfnrtv'"\\])|(?:0(\d{1,2}))|(\d)|(?:x([[:xdigit:]]{1,2})))))",
@@ -172,12 +177,10 @@ namespace clib {
                        std::regex::ECMAScript | std::regex::optimize};
         regex_t r_digit{R"(^((?:\d+(\.)?\d*)(?:[eE][+-]?\d+)?)([uU])?([fFdDiIlL])?)",
                         std::regex::ECMAScript | std::regex::optimize};
-        regex_t r_alpha{R"([[:alpha:]_]\w*)", std::regex::ECMAScript | std::regex::optimize};
         regex_t r_space{R"(([ ]+)|((?:\r\n)+)|(\n+))", std::regex::ECMAScript | std::regex::optimize};
         regex_t r_comment{R"((?://([^\r\n]*))|(?:/\*([[:print:]\n]*?)\*/))",
                           std::regex::ECMAScript | std::regex::optimize};
         regex_t r_hex{R"(^0x([[:xdigit:]]{1,8}))", std::regex::ECMAScript | std::regex::optimize};
-        regex_t r_keyword{lexer_keyword_regex(), std::regex::ECMAScript | std::regex::optimize};
         regex_t r_operator[3] =
             {
                 regex_t{lexer_operator_regex(1), std::regex::ECMAScript | std::regex::optimize},

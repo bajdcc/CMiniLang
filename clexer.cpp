@@ -11,6 +11,7 @@ namespace clib {
     clexer::clexer(string_t str) : str(str) {
         length = str.length();
         assert(length > 0);
+        initMap();
     }
 
     clexer::~clexer() {
@@ -413,46 +414,37 @@ LEX_T(t) clexer::get_store_##t(int index) const \
     }
 
     lexer_t clexer::next_alpha() {
-        if (std::regex_search(str.cbegin() + index, str.cend(), sm, r_alpha)) {
-            auto s = sm[0].str();
-            if (std::regex_search(s.cbegin(), s.cend(), sm, r_keyword)) {
-                auto b = sm.begin() + 1;
-                auto i = std::distance(b, std::find_if(b, sm.end(), match_pred));
-                bags._keyword = (keyword_t) (i + 1);
-                move(s.length());
-                return l_keyword;
-            } else {
-                bags._identifier = s.c_str();
-                move(s.length());
-                return l_identifier;
-            }
+        sint i;
+        for (i = index + 1; i < length && (isalnum(str[i]) || str[i] == '_'); i++);
+        auto s = str.substr(index, i - index);
+        auto kw = mapKeyword.find(s);
+        if (kw != mapKeyword.end()) { // 关键字
+            bags._keyword = kw->second;
+            move(s.length());
+            return l_keyword;
         }
-        assert(!"alpha not match"); // cannot reach
-        return l_error;
+        // 普通变量名
+        bags._identifier = s;
+        move(s.length());
+        return l_identifier;
     }
 
     lexer_t clexer::next_space() {
-        if (std::regex_search(str.cbegin() + index, str.cend(), sm, r_space)) {
-            auto ms = sm[0].str();
-            auto ml = ms.length();
-            if (ms[0] == ' ' || ms[0] == '\t') // space or tab
-            {
-                bags._space = ml;
-                move(ml);
+        uint i, j;
+        switch (str[index]) {
+            case ' ':
+            case '\t':
+                for (i = index + 1; i < length && (str[i] == ' ' || str[i] == '\t'); i++);
+                bags._space = i - index;
+                move(bags._space);
                 return l_space;
-            }
-            if (ms[0] == '\r') // \r\n
-            {
-                bags._newline = ml / 2;
-                move(ml, bags._newline, true);
+            case '\r':
+            case '\n':
+                for (i = index, j = 0; i < length &&
+                                       (str[i] == '\r' || (str[i] == '\n' ? ++j > 0 : false)); i++);
+                bags._newline = j;
+                move(i - index, bags._newline, true);
                 return l_newline;
-            }
-            if (ms[0] == '\n') // \n
-            {
-                bags._newline = ml;
-                move(ml, bags._newline, true);
-                return l_newline;
-            }
         }
         assert(!"space not match"); // cannot reach
         return l_error;
@@ -652,5 +644,12 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         if (index + offset < length)
             return str[index + offset];
         return -1;
+    }
+
+    void clexer::initMap() {
+        // Keyword
+        for (auto i = k__start + 1; i < k__end; i++) {
+            mapKeyword[keyword_string_list[(uint) i]] = (keyword_t) i;
+        }
     }
 }

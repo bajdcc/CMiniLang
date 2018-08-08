@@ -11,6 +11,7 @@
 using string_t = std::string;
 using smatch_t = std::smatch;
 using regex_t = std::regex;
+template<class K, class V> using map_t = std::map<K, V>;
 
 namespace clib {
     using int8 = signed __int8;
@@ -187,8 +188,8 @@ struct base_t<t> \
     DEFINE_BASE_TYPE(l_identifier, string_t)
     DEFINE_BASE_TYPE(l_string, string_t)
     DEFINE_BASE_TYPE(l_comment, string_t)
-    DEFINE_BASE_TYPE(l_space, int)
-    DEFINE_BASE_TYPE(l_newline, int)
+    DEFINE_BASE_TYPE(l_space, uint)
+    DEFINE_BASE_TYPE(l_newline, uint)
     DEFINE_BASE_TYPE(l_error, error_t)
 
 #undef DEFINE_BASE_TYPE
@@ -200,7 +201,7 @@ struct base_t<t> \
     const string_t &lexer_errstr(error_t);
     int lexer_operatorpred(operator_t);
 
-    string_t lexer_keyword_regex();
+    extern string_t keyword_string_list[];
     string_t lexer_operator_regex(int);
 
     int lexer_operator_start_idx(int);

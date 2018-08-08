@@ -81,17 +81,6 @@ namespace clib {
         return keyword_string_list[type - k__start - 1];
     }
 
-    string_t lexer_keyword_regex() {
-        string_t str;
-        for (auto i = k__start + 1; i < k__end; i++) {
-            str += "(^";
-            str += keyword_string_list[i];
-            str += "$)|";
-        }
-        str.erase(str.length() - 1);
-        return str;
-    }
-
     string_t operator_string_list[] = {
         "@START",
         "=",
