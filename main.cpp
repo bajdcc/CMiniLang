@@ -57,8 +57,8 @@ int main()
 
     try {
         clib::cparser p(txt);
-    } catch (const std::regex_error& error) {
-        printf("%s", error.what());
+    } catch (const std::exception& e) {
+        printf("ERROR");
     }
     return 0;
 }

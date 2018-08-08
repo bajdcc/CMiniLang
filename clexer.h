@@ -54,14 +54,15 @@ namespace clib {
     public:
         struct err_record_t {
             int line, column;
-            int start_idx, end_idx;
+            uint start_idx, end_idx;
             error_t err;
+            string_t str;
         };
 
     private:
         std::vector<err_record_t> records;
 
-        lexer_t record_error(error_t error);
+        lexer_t record_error(error_t error, int skip);
         lexer_t expect(int start, error_t error, const regex_t &re, int skip);
 
     public:
@@ -74,6 +75,7 @@ namespace clib {
         int get_last_column() const;
         string_t current() const;
 
+        const err_record_t& recent_error() const;
         std::string store_start();
 
     private:

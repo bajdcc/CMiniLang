@@ -274,11 +274,11 @@ namespace clib {
 
     string_t err_string_list[] = {
         "@START",
-        "invalid character",
-        "invalid operator",
-        "invalid comment",
-        "invalid digit",
-        "invalid string",
+        "#E !char!",
+        "#E !operator!",
+        "#E !comment!",
+        "#E !digit!",
+        "#E !string!",
         "@END",
     };
 

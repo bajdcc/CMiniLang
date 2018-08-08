@@ -14,8 +14,7 @@ namespace clib {
         initMap();
     }
 
-    clexer::~clexer() {
-    }
+    clexer::~clexer() = default;
 
 #define DEFINE_LEXER_GETTER(t) \
 LEX_T(t) clexer::get_##t() const \
@@ -67,16 +66,22 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         return sm.matched;
     }
 
-    lexer_t clexer::record_error(error_t error) {
-        err_record_t err;
-        err.line = last_line;
-        err.column = last_column;
-        err.start_idx = last_index;
-        err.end_idx = index;
+    lexer_t clexer::record_error(error_t error, int skip) {
+        err_record_t err{};
+        err.line = line;
+        err.column = column;
+        err.start_idx = index;
+        err.end_idx = index + skip;
         err.err = error;
+        err.str = str.substr(err.start_idx, err.end_idx - err.start_idx);
         records.push_back(err);
         bags._error = error;
+        move(skip);
         return l_error;
+    }
+
+    const clexer::err_record_t &clexer::recent_error() const {
+        return records.back();
     }
 
     lexer_t clexer::expect(int start, error_t error, const regex_t &re, int skip) {
@@ -84,12 +89,11 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         {
             if (sm[0].matched) {
                 auto ml = sm[0].length();
-                move(ml);
-                return record_error(error);
+                return record_error(error, ml);
             }
         }
         move(skip); // move to end
-        return record_error(error);
+        return record_error(error, skip);
     }
 
     lexer_t clexer::next() {
@@ -447,80 +451,110 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                 return l_newline;
         }
         assert(!"space not match"); // cannot reach
+        move(1);
         return l_error;
     }
 
-    lexer_t clexer::next_char() {
-        if (std::regex_search(str.cbegin() + index, str.cend(), sm, r_char)) {
-            if (sm[1].matched) // like 'a'
-            {
-                bags._char = sm[1].str()[0];
-                move(sm[0].length());
-                if (!isprint(bags._char))
-                    return l_error;
-                return l_char;
-            }
-            if (sm[2].matched) {
-                auto type = l_char;
-                switch (sm[2].str()[0]) // like \r, \n, ...
-                {
-                    case 'b':
-                        bags._char = '\b';
-                        break;
-                    case 'f':
-                        bags._char = '\f';
-                        break;
-                    case 'n':
-                        bags._char = '\n';
-                        break;
-                    case 'r':
-                        bags._char = '\r';
-                        break;
-                    case 't':
-                        bags._char = '\t';
-                        break;
-                    case 'v':
-                        bags._char = '\v';
-                        break;
-                    case '\'':
-                        bags._char = '\'';
-                        break;
-                    case '\"':
-                        bags._char = '\"';
-                        break;
-                    case '\\':
-                        bags._char = '\\';
-                        break;
-                    default:
-                        type = l_error;
-                        break;
-                }
-                move(sm[0].length());
-                return type;
-            }
-            if (sm[3].matched) // like '\0111'
-            {
-                auto oct = std::strtol(sm[3].str().c_str(), NULL, 8);
-                bags._char = char(oct);
-                move(sm[0].length());
-                return l_char;
-            }
-            if (sm[4].matched) // like '\8'
-            {
-                auto n = std::atoi(sm[4].str().c_str());
-                bags._char = char(n);
-                move(sm[0].length());
-                return l_char;
-            }
-            if (sm[5].matched) // like '\xff'
-            {
-                auto hex = std::strtol(sm[3].str().c_str(), NULL, 16);
-                bags._char = char(hex);
-                move(sm[0].length());
-                return l_char;
+    static int hex2dec(char c) {
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        } else if (c >= 'a' && c <= 'f') {
+            return c - 'a' + 10;
+        } else if (c >= 'A' && c <= 'F') {
+            return c - 'A' + 10;
+        } else {
+            return -1;
+        }
+    }
+
+    static int escape(char c) {
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        } else {
+            switch (c) { // like \r, \n, ...
+                case 'b':
+                    return '\b';
+                case 'f':
+                    return '\f';
+                case 'n':
+                    return '\n';
+                case 'r':
+                    return '\r';
+                case 't':
+                    return '\t';
+                case 'v':
+                    return '\v';
+                case '\'':
+                    return '\'';
+                case '\"':
+                    return '\"';
+                case '\\':
+                    return '\\';
+                default:
+                    return -1;
             }
         }
-        return expect(1, e_invalid_char, r_expect_nonchar, length - index);
+    }
+
+    lexer_t clexer::next_char() {
+        sint i;
+        for (i = 1; index + i < length && str[index + i] != '\'' && i <= 4; i++);
+        if (i == 1) { // ''
+            return record_error(e_invalid_char, i + 1);
+        }
+        auto j = index + i;
+        i++;
+        if (j < length && str[j] == '\'') {
+            if (str[index + 1] == '\\') {
+                if (i == 3) { // '\'
+                    return record_error(e_invalid_char, i);
+                }
+                if (i == 4) { // '\?'
+                    auto esc = escape(str[index + 2]);
+                    if (esc != -1) {
+                        bags._char = (char) esc;
+                        move(i);
+                        return l_char;
+                    }
+                    return record_error(e_invalid_char, i);
+                }
+                if (i == 5) { // '\x?'
+                    if (str[index + 1] == '\\' && str[index + 2] == 'x') {
+                        auto esc = hex2dec(str[index + 3]);
+                        if (esc != -1) {
+                            bags._char = (char) esc;
+                            move(i);
+                            return l_char;
+                        }
+                        return record_error(e_invalid_char, i);
+                    }
+                    return record_error(e_invalid_char, i);
+                }
+                // '\x??'
+                if (str[index + 1] == '\\' && str[index + 2] == 'x') {
+                    auto esc = hex2dec(str[index + 3]);
+                    if (esc != -1) {
+                        bags._char = (char) esc;
+                        esc = hex2dec(str[index + 4]);
+                        if (esc != -1) {
+                            bags._char *= 0x10;
+                            bags._char += (char) esc;
+                            move(i);
+                            return l_char;
+                        }
+                        return record_error(e_invalid_char, i);
+                    }
+                    return record_error(e_invalid_char, i);
+                }
+                return record_error(e_invalid_char, i);
+            } else if (i == 3) { // '?'
+                bags._char = str[index + 1];
+                move(i);
+                return l_char;
+            }
+            return record_error(e_invalid_char, 1);
+        }
+        return record_error(e_invalid_char, 1);
     }
 
     lexer_t clexer::next_string() {
@@ -539,8 +573,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                     }
                     bags._string += c;
                     if (!isprint(c)) {
-                        move(1);
-                        return record_error(e_invalid_string);
+                        return record_error(e_invalid_string, 1);
                     }
                 } else if (sm[2].matched) // like \r, \n, ...
                 {
@@ -613,7 +646,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
             }
         }
         move(length - index); // move to end
-        return record_error(e_invalid_comment);
+        return record_error(e_invalid_comment, length - index);
     }
 
     lexer_t clexer::next_operator() {
@@ -630,8 +663,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                 return l_operator;
             }
         }
-        move(1);
-        return record_error(e_invalid_operator);
+        return record_error(e_invalid_operator, 1);
     }
 
     int clexer::local() {

@@ -16,8 +16,7 @@ namespace clib {
         init();
     }
 
-    cparser::~cparser() {
-    }
+    cparser::~cparser() = default;
 
     void cparser::init() {
         program();
@@ -28,17 +27,24 @@ namespace clib {
         lexer_t token;
         do {
             token = lexer.next();
-#if 0
-            if (token != l_end) {
+            if (token == l_error) {
+                auto err = lexer.recent_error();
                 printf("[%04d:%03d] %-12s - %s\n",
-                       lexer.get_last_line(),
-                       lexer.get_last_column(),
-                       LEX_STRING(lexer.get_type()).c_str(),
-                       lexer.current().c_str());
+                       err.line,
+                       err.column,
+                       ERROR_STRING(err.err).c_str(),
+                       err.str.c_str());
             }
+        } while (token == l_newline || token == l_space || token == l_comment || token == l_error);
+#if 1
+        if (token != l_end) {
+            printf("[%04d:%03d] %-12s - %s\n",
+                   lexer.get_last_line(),
+                   lexer.get_last_column(),
+                   LEX_STRING(lexer.get_type()).c_str(),
+                   lexer.current().c_str());
+        }
 #endif
-        } while (token == l_newline || token == l_space || token == l_comment);
-        assert(token != l_error);
     }
 
     void cparser::program() {
@@ -898,7 +904,6 @@ namespace clib {
 
     void cparser::error(string_t info) {
         printf("[%04d:%03d] ERROR: %s\n", lexer.get_line(), lexer.get_column(), info.c_str());
-        assert(0);
-        exit(-1);
+        throw std::exception();
     }
 }

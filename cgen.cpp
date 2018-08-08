@@ -14,8 +14,7 @@ namespace clib {
     }
 
 
-    cgen::~cgen() {
-    }
+    cgen::~cgen() = default;
 
     void cgen::emit(LEX_T(int) ins) {
         text.push_back(ins);
