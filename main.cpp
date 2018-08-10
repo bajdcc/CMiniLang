@@ -58,7 +58,7 @@ int main()
     try {
         clib::cparser p(txt);
     } catch (const std::exception& e) {
-        printf("ERROR");
+        printf("ERROR: %s\n", e.what());
     }
     return 0;
 }

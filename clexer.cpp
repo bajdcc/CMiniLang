@@ -85,17 +85,6 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         return records.back();
     }
 
-    lexer_t clexer::expect(int start, error_t error, const regex_t &re, int skip) {
-        if (std::regex_search(str.cbegin() + index + start, str.cend(), sm, re)) { // handle error
-            if (sm[0].matched) {
-                auto ml = sm[0].length();
-                return record_error(error, ml);
-            }
-        }
-        move(skip); // move to end
-        return record_error(error, skip);
-    }
-
     lexer_t clexer::next() {
         auto c = local();
         if (c == -1) {
@@ -117,8 +106,11 @@ LEX_T(t) clexer::get_store_##t(int index) const \
             auto c2 = local(1);
             if (c2 == '/' || c2 == '*') { // 注释
                 type = next_comment();
-            } else { // 操作符
+            } else if (c2 != -1) { // 操作符
                 type = next_operator();
+            } else {
+                bags._operator = op_divide;
+                type = l_operator;
             }
         } else {
             type = next_operator();
@@ -794,20 +786,93 @@ LEX_T(t) clexer::get_store_##t(int index) const \
     }
 
     lexer_t clexer::next_operator() {
-        for (auto i = 2; i >= 0; i--) {
-            if (index + i >= length)
-                continue;
-            if (std::regex_search(str.cbegin() + index, str.cbegin() + index + i + 1, sm, r_operator[i])) {
-                auto s = sm[0].str();
-                auto b = sm.begin() + 1;
-                auto j = std::distance(b, std::find_if(b, sm.end(), match_pred));
-                j += lexer_operator_start_idx(i + 1) - 1;
-                bags._operator = (operator_t) (j + 1);
-                move(s.length());
+        auto c = local();
+        if (bitOp[0].test((uint) c)) {
+            auto c2 = local(1);
+            if (c2 != -1 && bitOp[1].test((uint) c2)) {
+                auto c3 = local(2);
+                if (c3 != -1 && (c3 == '=' || c3 == '.')) {
+                    // 三字符操作符
+                    auto p = op__start;
+                    if (c3 == '=') {
+                        if (c == c2) {
+                            if (c == '<') {
+                                p = op_left_shift_assign;
+                            } else if (c == '>') {
+                                p = op_left_shift_assign;
+                            }
+                        }
+                    } else if (c3 == '.') {
+                        if (c == '.' && c2 == '.') {
+                            p = op_ellipsis;
+                        }
+                    }
+                    if (p == op__start) {
+                        return record_error(e_invalid_operator, 3);
+                    } else {
+                        bags._operator = (operator_t) p;
+                        move(3);
+                        return l_operator;
+                    }
+                } else {
+                    // 双字符操作符
+                    if (c2 == '=') {
+                        auto p = sinOp[c];
+                        if (p == 0 || p > op_logical_not) {
+                            return record_error(e_invalid_operator, 2);
+                        }
+                        bags._operator = (operator_t) (p + 1);
+                        move(2);
+                        return l_operator;
+                    }
+                    auto p = op__start;
+                    if (c == c2) {
+                        switch (c2) {
+                            case '+':
+                                p = op_plus_plus;
+                                break;
+                            case '-':
+                                p = op_minus_minus;
+                                break;
+                            case '&':
+                                p = op_logical_and;
+                                break;
+                            case '|':
+                                p = op_logical_or;
+                                break;
+                            case '<':
+                                p = op_left_shift;
+                                break;
+                            case '>':
+                                p = op_right_shift;
+                                break;
+                            default:
+                                break;
+                        }
+                    } else if (c == '-' && c2 == '>') {
+                        p = op_pointer;
+                    }
+                    if (p == op__start) {
+                        return record_error(e_invalid_operator, 2);
+                    } else {
+                        bags._operator = (operator_t) p;
+                        move(2);
+                        return l_operator;
+                    }
+                }
+            } else {
+                // 单字符操作符
+                auto p = sinOp[c];
+                if (p == 0) {
+                    return record_error(e_invalid_operator, 1);
+                }
+                bags._operator = (operator_t) p;
+                move(1);
                 return l_operator;
             }
+        } else {
+            return record_error(e_invalid_operator, 1);
         }
-        return record_error(e_invalid_operator, 1);
     }
 
     int clexer::local() {
@@ -826,6 +891,18 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         // Keyword
         for (auto i = k__start + 1; i < k__end; i++) {
             mapKeyword[KEYWORD_STRING((keyword_t) i)] = (keyword_t) i;
+        }
+        auto len = 0;
+        for (auto i = op__start + 1; i < op__end; i++) {
+            const auto &op = OP_STRING((operator_t) i);
+            len = op.length();
+            if (len == 1) {
+                sinOp[op[0]] = (operator_t) i;
+            }
+            len = std::min(len, 2);
+            for (auto j = 0; j < len; j++) {
+                bitOp[j].set((uint) op[j]);
+            }
         }
     }
 }

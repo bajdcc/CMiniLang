@@ -7,11 +7,12 @@
 
 #include <string>
 #include <regex>
+#include <unordered_map>
 
 using string_t = std::string;
 using smatch_t = std::smatch;
 using regex_t = std::regex;
-template<class K, class V> using map_t = std::map<K, V>;
+template<class K, class V> using map_t = std::unordered_map<K, V>;
 
 namespace clib {
     using int8 = signed __int8;
@@ -104,20 +105,32 @@ namespace clib {
     enum operator_t {
         op__start,
         op_assign,
+        op_equal,
         op_plus,
+        op_plus_assign,
         op_minus,
+        op_minus_assign,
         op_times,
+        op_times_assign,
         op_divide,
+        op_div_assign,
+        op_bit_and,
+        op_and_assign,
+        op_bit_or,
+        op_or_assign,
+        op_bit_xor,
+        op_xor_assign,
+        op_mod,
+        op_mod_assign,
+        op_less_than,
+        op_less_than_or_equal,
+        op_greater_than,
+        op_greater_than_or_equal,
+        op_logical_not,
+        op_not_equal,
         op_escape,
         op_query,
-        op_mod,
-        op_bit_and,
-        op_bit_or,
         op_bit_not,
-        op_bit_xor,
-        op_logical_not,
-        op_less_than,
-        op_greater_than,
         op_lparan,
         op_rparan,
         op_lbrace,
@@ -128,20 +141,8 @@ namespace clib {
         op_dot,
         op_semi,
         op_colon,
-        op_equal,
-        op_not_equal,
         op_plus_plus,
         op_minus_minus,
-        op_plus_assign,
-        op_minus_assign,
-        op_times_assign,
-        op_div_assign,
-        op_and_assign,
-        op_or_assign,
-        op_xor_assign,
-        op_mod_assign,
-        op_less_than_or_equal,
-        op_greater_than_or_equal,
         op_logical_and,
         op_logical_or,
         op_pointer,
@@ -150,7 +151,7 @@ namespace clib {
         op_left_shift_assign,
         op_right_shift_assign,
         op_ellipsis,
-        op__end
+        op__end,
     };
 
     enum error_t {
@@ -242,6 +243,7 @@ struct base_lexer_t<obj> \
 
 #define KEYWORD_STRING(t) lexer_keywordstr(t)
 #define OPERATOR_STRING(t) lexer_opnamestr(t)
+#define OP_STRING(t) lexer_opstr(t)
 #define ERROR_STRING(t) lexer_errstr(t)
 
 #define OPERATOR_PRED(t) lexer_operatorpred(t)

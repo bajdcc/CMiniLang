@@ -63,7 +63,6 @@ namespace clib {
         std::vector<err_record_t> records;
 
         lexer_t record_error(error_t error, int skip);
-        lexer_t expect(int start, error_t error, const regex_t &re, int skip);
 
     public:
         lexer_t next();
@@ -173,23 +172,16 @@ namespace clib {
 
         // 字典
         map_t<string_t, keyword_t> mapKeyword;
+        std::bitset<128> bitOp[2];
+        std::array<operator_t, 0x100> sinOp;
 
         void initMap();
 
         // 正则表达式
         smatch_t sm;
-        regex_t r_string{R"(([^\\])|(?:\\(?:([bfnrtv'"\\])|(?:0(\d{1,2}))|(\d)|(?:x([[:xdigit:]]{1,2})))))",
-                         std::regex::ECMAScript | std::regex::optimize};
         regex_t r_comment{R"((?://([^\r\n]*))|(?:/\*([[:print:]\n]*?)\*/))",
                           std::regex::ECMAScript | std::regex::optimize};
-        regex_t r_operator[3] =
-            {
-                regex_t{lexer_operator_regex(1), std::regex::ECMAScript | std::regex::optimize},
-                regex_t{lexer_operator_regex(2), std::regex::ECMAScript | std::regex::optimize},
-                regex_t{lexer_operator_regex(3), std::regex::ECMAScript | std::regex::optimize}
-            };
-
-        regex_t r_expect_nonstr{R"(^[[:alnum:]\\ ]+)", std::regex::ECMAScript | std::regex::optimize};
     };
 }
+
 #endif //CMINILANG_LEXER_H
