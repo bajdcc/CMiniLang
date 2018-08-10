@@ -78,7 +78,7 @@ namespace clib {
 
     const string_t &lexer_keywordstr(keyword_t type) {
         assert(type > k__start && type < k__end);
-        return keyword_string_list[type - k__start - 1];
+        return keyword_string_list[type - k__start];
     }
 
     string_t operator_string_list[] = {

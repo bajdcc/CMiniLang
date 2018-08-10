@@ -12,7 +12,7 @@ namespace clib {
      */
 
     cparser::cparser(string_t str)
-            : lexer(str) {
+        : lexer(str) {
         init();
     }
 
@@ -54,22 +54,19 @@ namespace clib {
         }
     }
 
-// 表达式
+    // 表达式
     void cparser::expression(operator_t level) {
         // 表达式有多种类型，像 `(char) *a[10] = (int *) func(b > 0 ? 10 : 20);
         //
         // 1. unit_unary ::= unit | unit unary_op | unary_op unit
         // 2. expr ::= unit_unary (bin_op unit_unary ...)
 
-        // unit_unary()
-        {
-            if (lexer.is_type(l_end)) // 结尾
-            {
+        { // unit_unary()
+            if (lexer.is_type(l_end)) { // 结尾
                 error("unexpected token EOF of expression");
                 assert(0);
             }
-            if (lexer.is_integer()) // 数字
-            {
+            if (lexer.is_integer()) { // 数字
                 auto tmp = lexer.get_integer();
                 match_number();
 
@@ -77,8 +74,7 @@ namespace clib {
                 gen.emit(IMM);
                 gen.emit(tmp);
                 expr_type = l_int;
-            } else if (lexer.is_type(l_string)) // 字符串
-            {
+            } else if (lexer.is_type(l_string)) { // 字符串
                 auto s = lexer.get_string();
 #if 0
                 printf("[%04d:%03d] String> %04X '%s'\n", clexer.get_line(), clexer.get_column(), idx, clexer.get_string().c_str());
@@ -102,8 +98,7 @@ namespace clib {
 
                 expr_type = l_char;
                 ptr_level = 1;
-            } else if (lexer.is_keyword(k_sizeof)) // sizeof
-            {
+            } else if (lexer.is_keyword(k_sizeof)) { // sizeof
                 // 支持 `sizeof(int)`, `sizeof(char)` and `sizeof(*...)`
                 match_keyword(k_sizeof);
                 match_operator(op_lparan);
@@ -133,8 +128,7 @@ namespace clib {
 
                 expr_type = l_int;
                 ptr_level = 0;
-            } else if (lexer.is_type(l_identifier)) // 变量
-            {
+            } else if (lexer.is_type(l_identifier)) { // 变量
                 // 三种可能
                 // 1. function call 函数名调用
                 // 2. Enum variable 枚举值
@@ -143,15 +137,13 @@ namespace clib {
 
                 auto func_id = id; // 保存当前的变量名(因为如果是函数调用，id会被覆盖)
 
-                if (lexer.is_operator(op_lparan)) // 函数调用
-                {
+                if (lexer.is_operator(op_lparan)) { // 函数调用
                     // function call
                     match_operator(op_lparan);
 
                     // pass in arguments
                     auto tmp = 0; // number of arguments
-                    while (!lexer.is_operator(op_rparan)) // 参数数量
-                    {
+                    while (!lexer.is_operator(op_rparan)) { // 参数数量
                         ptr_level = 0;
                         expression(op_assign);
                         gen.emit(PUSH);
@@ -166,12 +158,10 @@ namespace clib {
                     id = func_id;
 
                     // emit code
-                    if (id->cls == Sys) // 内建函数
-                    {
+                    if (id->cls == Sys) { // 内建函数
                         // system functions
                         gen.emit(*id);
-                    } else if (id->cls == Fun) // 普通函数
-                    {
+                    } else if (id->cls == Fun) { // 普通函数
                         // function call
                         gen.emit(CALL);
                         gen.emit(*id);
@@ -194,12 +184,10 @@ namespace clib {
                     ptr_level = 0;
                 } else {
                     // variable
-                    if (id->cls == Loc) // 本地变量
-                    {
+                    if (id->cls == Loc) { // 本地变量
                         gen.emit(LEA);
                         gen.emit(*id, ebp);
-                    } else if (id->cls == Glo) // 全局变量
-                    {
+                    } else if (id->cls == Glo) { // 全局变量
                         gen.emit(IMM);
                         gen.emit(*id);
                         gen.emit(LOAD);
@@ -212,8 +200,7 @@ namespace clib {
                     ptr_level = id->ptr;
                     gen.emitl(id->ptr > 0 ? l_int : expr_type);
                 }
-            } else if (lexer.is_operator(op_lparan)) // 强制转换
-            {
+            } else if (lexer.is_operator(op_lparan)) { // 强制转换
                 // cast or parenthesis
                 match_operator(op_lparan);
                 if (lexer.is_type(l_keyword)) {
@@ -234,16 +221,14 @@ namespace clib {
                     expression(op_assign);
                     match_operator(op_rparan);
                 }
-            } else if (lexer.is_operator(op_times)) // 解引用
-            {
+            } else if (lexer.is_operator(op_times)) { // 解引用
                 // dereference *<addr>
                 match_operator(op_times);
                 expression(op_plus_plus);
                 ptr_level--;
 
                 gen.emitl((id->ptr > 0) ? ((id->ptr == 1 && expr_type == l_char) ? l_char : l_int) : expr_type);
-            } else if (lexer.is_operator(op_bit_and)) // 取地址
-            {
+            } else if (lexer.is_operator(op_bit_and)) { // 取地址
                 // get the address of
                 match_operator(op_bit_and);
                 expression(op_plus_plus);
@@ -328,10 +313,8 @@ namespace clib {
             }
         }
 
-        // 二元表达式以及后缀操作符
-        {
-            while (lexer.is_type(l_operator) && OPERATOR_PRED(lexer.get_operator()) <= OPERATOR_PRED(level)) // 优先级判断
-            {
+        { // 二元表达式以及后缀操作符
+            while (lexer.is_type(l_operator) && OPERATOR_PRED(lexer.get_operator()) <= OPERATOR_PRED(level)) { // 优先级判断
                 auto tmp = expr_type;
                 auto ptr = ptr_level;
                 if (lexer.is_operator(op_rparan) || lexer.is_operator(op_rsquare) || lexer.is_operator(op_colon)) {
@@ -383,15 +366,15 @@ namespace clib {
                 MATCH_BINOP(op_bit_or, OR, op_bit_xor)MATCH_BINOP(op_bit_xor, XOR, op_bit_and)MATCH_BINOP(op_bit_and,
                                                                                                           AND,
                                                                                                           op_equal)MATCH_BINOP(
-                        op_equal, EQ, op_not_equal)MATCH_BINOP(op_not_equal, NE, op_less_than)MATCH_BINOP(op_less_than,
-                                                                                                          LT,
-                                                                                                          op_left_shift)MATCH_BINOP(
-                        op_less_than_or_equal, LE, op_left_shift)MATCH_BINOP(op_greater_than, GT,
-                                                                             op_left_shift)MATCH_BINOP(
-                        op_greater_than_or_equal, GE, op_left_shift)MATCH_BINOP(op_left_shift, SHL, op_plus)MATCH_BINOP(
-                        op_right_shift, SHR, op_plus)MATCH_BINOP(op_times, MUL, op_plus_plus)MATCH_BINOP(op_divide, DIV,
-                                                                                                         op_plus_plus)MATCH_BINOP(
-                        op_mod, MOD, op_plus_plus)
+                    op_equal, EQ, op_not_equal)MATCH_BINOP(op_not_equal, NE, op_less_than)MATCH_BINOP(op_less_than,
+                                                                                                      LT,
+                                                                                                      op_left_shift)MATCH_BINOP(
+                    op_less_than_or_equal, LE, op_left_shift)MATCH_BINOP(op_greater_than, GT,
+                                                                         op_left_shift)MATCH_BINOP(
+                    op_greater_than_or_equal, GE, op_left_shift)MATCH_BINOP(op_left_shift, SHL, op_plus)MATCH_BINOP(
+                    op_right_shift, SHR, op_plus)MATCH_BINOP(op_times, MUL, op_plus_plus)MATCH_BINOP(op_divide, DIV,
+                                                                                                     op_plus_plus)MATCH_BINOP(
+                    op_mod, MOD, op_plus_plus)
 #undef MATCH_BINOP
                 else if (lexer.is_operator(op_plus)) {
                     // add
@@ -499,7 +482,7 @@ namespace clib {
         }
     }
 
-// 基本语句
+    // 基本语句
     void cparser::statement() {
         // there are 8 kinds of statements here:
         // 1. if (...) <statement> [else <statement>]
@@ -509,8 +492,7 @@ namespace clib {
         // 5. <empty statement>;
         // 6. expression; (expression end with semicolon)
 
-        if (lexer.is_keyword(k_if)) // if判断
-        {
+        if (lexer.is_keyword(k_if)) { // if判断
             // if (...) <statement> [else <statement>]
             //
             //   if (...)           <cond>
@@ -546,8 +528,7 @@ namespace clib {
             }
 
             gen.emit(gen.index(), b);
-        } else if (lexer.is_keyword(k_while)) // while循环
-        {
+        } else if (lexer.is_keyword(k_while)) { // while循环
             //
             // a:                     a:
             //    while (<cond>)        <cond>
@@ -572,8 +553,7 @@ namespace clib {
             gen.emit(JMP);
             gen.emit(a); // 重复循环
             gen.emit(gen.index(), b);
-        } else if (lexer.is_operator(op_lbrace)) // 语句
-        {
+        } else if (lexer.is_operator(op_lbrace)) { // 语句
             // { <statement> ... }
             match_operator(op_lbrace);
 
@@ -582,8 +562,7 @@ namespace clib {
             }
 
             match_operator(op_rbrace);
-        } else if (lexer.is_keyword(k_return)) // 返回
-        {
+        } else if (lexer.is_keyword(k_return)) { // 返回
             // return [expression];
             match_keyword(k_return);
 
@@ -595,12 +574,10 @@ namespace clib {
 
             // emit code for return
             gen.emit(LEV);
-        } else if (lexer.is_operator(op_semi)) // 空语句
-        {
+        } else if (lexer.is_operator(op_semi)) { // 空语句
             // empty statement
             match_operator(op_semi);
-        } else // 表达式
-        {
+        } else { // 表达式
             // a = b; or function_call();
             expression(op_assign);
             match_operator(op_semi);
@@ -608,7 +585,7 @@ namespace clib {
         ptr_level = 0;
     }
 
-// 枚举声明
+    // 枚举声明
     void cparser::enum_declaration() {
         // parse enum [id] { a = 1, b = 3, ...}
         int i = 0;
@@ -617,8 +594,7 @@ namespace clib {
                 error("bad enum identifier " + lexer.current());
             }
             match_type(l_identifier);
-            if (lexer.is_operator(op_assign)) // 赋值
-            {
+            if (lexer.is_operator(op_assign)) { // 赋值
                 // like { a = 10 }
                 next();
                 if (!lexer.is_integer()) {
@@ -639,18 +615,16 @@ namespace clib {
         }
     }
 
-// 函数参数
+    // 函数参数
     void cparser::function_parameter() {
         auto params = 0;
-        while (!lexer.is_operator(op_rparan)) // 判断参数右括号结尾
-        {
+        while (!lexer.is_operator(op_rparan)) { // 判断参数右括号结尾
             // int name, ...
             auto type = parse_type(); // 基本类型
             auto ptr = 0;
 
             // pointer type
-            while (lexer.is_operator(op_times)) // 指针
-            {
+            while (lexer.is_operator(op_times)) { // 指针
                 match_operator(op_times);
                 ptr++;
             }
@@ -661,8 +635,7 @@ namespace clib {
             }
 
             match_type(l_identifier);
-            if (id->cls == Loc) // 与变量声明冲突
-            {
+            if (id->cls == Loc) { // 与变量声明冲突
                 error("duplicate parameter declaration");
             }
 
@@ -687,13 +660,12 @@ namespace clib {
         ebp = params + 4;
     }
 
-// 函数体
+    // 函数体
     void cparser::function_body() {
         // type func_name (...) {...}
         //                   -->|   |<--
 
-        // ...
-        {
+        { // ...
             // 1. local declarations
             // 2. statements
             // }
@@ -704,12 +676,10 @@ namespace clib {
                 // 处理基本类型
                 base_type = parse_type();
 
-                while (!lexer.is_operator(op_semi)) // 判断语句结束
-                {
+                while (!lexer.is_operator(op_semi)) { // 判断语句结束
                     auto ptr = 0;
                     auto type = base_type;
-                    while (lexer.is_operator(op_times)) // 处理指针
-                    {
+                    while (lexer.is_operator(op_times)) { // 处理指针
                         match_operator(op_times);
                         ptr++;
                     }
@@ -719,8 +689,7 @@ namespace clib {
                         error("bad local declaration");
                     }
                     match_type(l_identifier);
-                    if (id->cls == Loc) // 变量重复声明
-                    {
+                    if (id->cls == Loc) { // 变量重复声明
                         // identifier exists
                         error("duplicate local declaration");
                     }
@@ -759,7 +728,7 @@ namespace clib {
         }
     }
 
-// 函数声明
+    // 函数声明
     void cparser::function_declaration() {
         // type func_name (...) {...}
         //               | this part
@@ -774,8 +743,8 @@ namespace clib {
         gen.unwind();
     }
 
-// 变量声明语句(全局或函数体内)
-// int [*]id [; | (...) {...}]
+    // 变量声明语句(全局或函数体内)
+    // int [*]id [; | (...) {...}]
     void cparser::global_declaration() {
         base_type = l_int;
 
@@ -812,22 +781,19 @@ namespace clib {
                 ptr++;
             }
 
-            if (!lexer.is_type(l_identifier)) // 不存在变量名则报错
-            {
+            if (!lexer.is_type(l_identifier)) { // 不存在变量名则报错
                 // invalid declaration
                 error("bad global declaration");
             }
             match_type(l_identifier);
-            if (id->cls) // 变量名已经声明，则报重复声明错误
-            {
+            if (id->cls) { // 变量名已经声明，则报重复声明错误
                 // identifier exists
                 error("duplicate global declaration");
             }
             id->type = type;
             id->ptr = ptr;
 
-            if (lexer.is_operator(op_lparan)) // 有左括号则应判定是函数声明
-            {
+            if (lexer.is_operator(op_lparan)) { // 有左括号则应判定是函数声明
                 id->cls = Fun;
                 id->value._int = gen.index(); // 记录函数地址
 #if 0
@@ -877,15 +843,14 @@ namespace clib {
         next();
     }
 
-// 处理基本类型
-// 分char,short,int,long以及相应的无符号类型(无符号暂时不支持)
-// 以及float和double(暂时不支持)
+    // 处理基本类型
+    // 分char,short,int,long以及相应的无符号类型(无符号暂时不支持)
+    // 以及float和double(暂时不支持)
     lexer_t cparser::parse_type() {
         auto type = l_int;
         if (lexer.is_type(l_keyword)) {
             auto _unsigned = false;
-            if (lexer.is_keyword(k_unsigned)) // 判定是否带有unsigned前缀
-            {
+            if (lexer.is_keyword(k_unsigned)) { // 判定是否带有unsigned前缀
                 _unsigned = true;
                 match_keyword(k_unsigned);
             }
@@ -895,7 +860,7 @@ namespace clib {
         return type;
     }
 
-// 保存刚刚识别的变量名
+    // 保存刚刚识别的变量名
     void cparser::save_identifier() {
         id = gen.add_sym(lexer.get_identifier());
         if (id->ptr == 0)

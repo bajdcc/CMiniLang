@@ -44,8 +44,8 @@ namespace clib {
         }
     }
 
-// 虚页映射
-// va = 虚拟地址  pa = 物理地址
+    // 虚页映射
+    // va = 虚拟地址  pa = 物理地址
     void cvm::vmm_map(uint32_t va, uint32_t pa, uint32_t flags) {
         uint32_t pde_idx = PDE_INDEX(va); // 页目录号
         uint32_t pte_idx = PTE_INDEX(va); // 页表号

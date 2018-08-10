@@ -78,6 +78,11 @@ namespace clib {
         const err_record_t& recent_error() const;
         std::string store_start();
 
+        lexer_t digit_type(lexer_t t, int i);
+        bool digit_from_integer(lexer_t t, LEX_T(ulong) n);
+        bool digit_from_double(lexer_t t, LEX_T(double) n);
+        lexer_t digit_return(lexer_t t, LEX_T(ulong) n, LEX_T(double) d, int i);
+
     private:
         void move(int idx, int inc = -1, bool newline = false);
 
@@ -175,14 +180,8 @@ namespace clib {
         smatch_t sm;
         regex_t r_string{R"(([^\\])|(?:\\(?:([bfnrtv'"\\])|(?:0(\d{1,2}))|(\d)|(?:x([[:xdigit:]]{1,2})))))",
                          std::regex::ECMAScript | std::regex::optimize};
-        regex_t r_char{R"('(?:([^'\\])|(?:\\(?:([bfnrtv'"\\])|(?:0(\d{1,2}))|(\d)|(?:x([[:xdigit:]]{1,2})))))')",
-                       std::regex::ECMAScript | std::regex::optimize};
-        regex_t r_digit{R"(^((?:\d+(\.)?\d*)(?:[eE][+-]?\d+)?)([uU])?([fFdDiIlL])?)",
-                        std::regex::ECMAScript | std::regex::optimize};
-        regex_t r_space{R"(([ ]+)|((?:\r\n)+)|(\n+))", std::regex::ECMAScript | std::regex::optimize};
         regex_t r_comment{R"((?://([^\r\n]*))|(?:/\*([[:print:]\n]*?)\*/))",
                           std::regex::ECMAScript | std::regex::optimize};
-        regex_t r_hex{R"(^0x([[:xdigit:]]{1,8}))", std::regex::ECMAScript | std::regex::optimize};
         regex_t r_operator[3] =
             {
                 regex_t{lexer_operator_regex(1), std::regex::ECMAScript | std::regex::optimize},
@@ -190,7 +189,6 @@ namespace clib {
                 regex_t{lexer_operator_regex(3), std::regex::ECMAScript | std::regex::optimize}
             };
 
-        regex_t r_expect_nonchar{R"(^[[:alnum:]\\]+)", std::regex::ECMAScript | std::regex::optimize};
         regex_t r_expect_nonstr{R"(^[[:alnum:]\\ ]+)", std::regex::ECMAScript | std::regex::optimize};
     };
 }

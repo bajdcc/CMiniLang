@@ -4,6 +4,7 @@
 //
 
 #include <cassert>
+#include <climits>
 #include "clexer.h"
 
 namespace clib {
@@ -85,8 +86,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
     }
 
     lexer_t clexer::expect(int start, error_t error, const regex_t &re, int skip) {
-        if (std::regex_search(str.cbegin() + index + start, str.cend(), sm, re)) // handle error
-        {
+        if (std::regex_search(str.cbegin() + index + start, str.cend(), sm, re)) { // handle error
             if (sm[0].matched) {
                 auto ml = sm[0].length();
                 return record_error(error, ml);
@@ -103,31 +103,21 @@ LEX_T(t) clexer::get_store_##t(int index) const \
             return l_end;
         }
         type = l_error;
-        if (isalpha(c) || c == '_') // 变量名或关键字
-        {
+        if (isalpha(c) || c == '_') { // 变量名或关键字
             type = next_alpha();
-        } else if (isdigit(c)) // 数字
-        {
+        } else if (isdigit(c)) { // 数字
             type = next_digit();
-            if (type == l_operator)
-                type = next_operator();
-        } else if (isspace(c)) // 空白字符
-        {
+        } else if (isspace(c)) { // 空白字符
             type = next_space();
-        } else if (c == '\'') // 字符
-        {
+        } else if (c == '\'') { // 字符
             type = next_char();
-        } else if (c == '\"') // 字符串
-        {
+        } else if (c == '\"') { // 字符串
             type = next_string();
-        } else if (c == '/') // 注释
-        {
+        } else if (c == '/') { // 注释
             auto c2 = local(1);
-            if (c2 == '/' || c2 == '*') // 注释
-            {
+            if (c2 == '/' || c2 == '*') { // 注释
                 type = next_comment();
-            } else // 操作符
-            {
+            } else { // 操作符
                 type = next_operator();
             }
         } else {
@@ -342,79 +332,230 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         index += idx;
     }
 
-    lexer_t clexer::next_digit() {
-        if (std::regex_search(str.cbegin() + index, str.cend(), sm, r_hex)) {
-            if (sm[1].matched) {
-                auto s = sm[1].str();
-                bags._uint = std::strtol(s.c_str(), NULL, 16);
-                move(sm[0].length());
+    // 计算幂
+    template<class T>
+    static T calc_exp(T d, int e) {
+        if (e == 0)
+            return d;
+        else if (e > 0)
+            for (int i = 0; i < e; i++)
+                d *= 10;
+        else
+            for (int i = e; i < 0; i++)
+                d /= 10;
+        return d;
+    }
+
+    static lexer_t unsigned_type(lexer_t t) {
+        switch (t) {
+            case l_char:
+                return l_uchar;
+            case l_short:
+                return l_ushort;
+            case l_int:
                 return l_uint;
-            }
-        } else if (std::regex_search(str.cbegin() + index, str.cend(), sm, r_digit)) {
-            auto s = sm[1].str();
-            auto type = l_error;
-            if (sm[4].matched) {
-                if (!sm[3].matched) {
-                    switch (sm[4].str()[0]) {
-                        case 'F': // 100F
-                        case 'f': // 100f
-                            type = l_float;
-                            bags._float = LEX_T(float)(std::atof(s.c_str()));
-                            break;
-                        case 'D': // 100D
-                        case 'd': // 100d
-                            type = l_double;
-                            bags._double = LEX_T(double)(std::atof(s.c_str()));
-                            break;
-                        case 'I': // 100I
-                        case 'i': // 100i
-                            type = l_int;
-                            bags._int = LEX_T(int)(std::atoi(s.c_str()));
-                            break;
-                        case 'L': // 100L
-                        case 'l': // 100l
-                            type = l_long;
-                            bags._long = LEX_T(long)(std::atol(s.c_str()));
-                            break;
-                        default:
-                            break;
-                    }
-                } else {
-                    switch (sm[4].str()[0]) {
-                        case 'I': // 100UI 100uI
-                        case 'i': // 100Ui 100ui
-                            type = l_uint;
-                            bags._uint = LEX_T(uint)(std::atof(s.c_str()));
-                            break;
-                        case 'L': // 100UL 100uL
-                        case 'l': // 100Ul 100ul
-                            type = l_ulong;
-                            bags._ulong = LEX_T(ulong)(std::atof(s.c_str()));
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            } else if (sm[5].matched) // 0x12345678
-            {
-                type = l_uint;
-                bags._uint = std::atoi(sm[5].str().c_str());
-            } else {
-                if (sm[2].matched) // double <- contains dot '.'
-                {
-                    type = l_double;
-                    bags._double = std::atof(s.c_str());
-                } else // int <- default
-                {
-                    type = l_int;
-                    bags._int = std::atoi(s.c_str());
-                }
-            }
-            move(sm[0].length());
-            return type;
+            case l_long:
+                return l_ulong;
+            default:
+                return t;
         }
-        assert(!"digit not match"); // cannot reach
-        return l_error;
+    }
+
+    static lexer_t digit_type_postfix(char c) {
+        switch (c) {
+            case 'C':
+            case 'c':
+                return l_char;
+            case 'S':
+            case 's':
+                return l_short;
+            case 'I':
+            case 'i':
+                return l_int;
+            case 'L':
+            case 'l':
+                return l_long;
+            case 'F':
+            case 'f':
+                return l_float;
+            case 'D':
+            case 'd':
+                return l_double;
+            default:
+                return l_error;
+        }
+    }
+
+    lexer_t clexer::digit_type(lexer_t t, int i) {
+        if (i == length) {
+            return l_error;
+        }
+        if (str[i] == 'U' || str[i] == 'u') {
+            if (++i == length) {
+                return unsigned_type(t);
+            }
+            return unsigned_type(digit_type_postfix(str[i]));
+        } else {
+            if ((t = digit_type_postfix(str[i])) == l_error) {
+                return l_error;
+            }
+            return t;
+        }
+    }
+
+    bool clexer::digit_from_integer(lexer_t t, LEX_T(ulong) n) {
+        switch (t) {
+#define DEFINE_LEXER_CONV_INTEGER(t) case l_##t: bags._##t = (LEX_T(t)) n; break;
+            DEFINE_LEXER_CONV_INTEGER(char)
+            DEFINE_LEXER_CONV_INTEGER(uchar)
+            DEFINE_LEXER_CONV_INTEGER(short)
+            DEFINE_LEXER_CONV_INTEGER(ushort)
+            DEFINE_LEXER_CONV_INTEGER(int)
+            DEFINE_LEXER_CONV_INTEGER(uint)
+            DEFINE_LEXER_CONV_INTEGER(long)
+            DEFINE_LEXER_CONV_INTEGER(ulong)
+            DEFINE_LEXER_CONV_INTEGER(float)
+            DEFINE_LEXER_CONV_INTEGER(double)
+#undef DEFINE_LEXER_CONV_INTEGER
+            default:
+                return false;
+        }
+        return true;
+    }
+
+    bool clexer::digit_from_double(lexer_t t, LEX_T(double) d) {
+        switch (t) {
+#define DEFINE_LEXER_CONV_INTEGER(t) case l_##t: bags._##t = (LEX_T(t)) d; break;
+            DEFINE_LEXER_CONV_INTEGER(char)
+            DEFINE_LEXER_CONV_INTEGER(uchar)
+            DEFINE_LEXER_CONV_INTEGER(short)
+            DEFINE_LEXER_CONV_INTEGER(ushort)
+            DEFINE_LEXER_CONV_INTEGER(int)
+            DEFINE_LEXER_CONV_INTEGER(uint)
+            DEFINE_LEXER_CONV_INTEGER(long)
+            DEFINE_LEXER_CONV_INTEGER(ulong)
+            DEFINE_LEXER_CONV_INTEGER(float)
+            DEFINE_LEXER_CONV_INTEGER(double)
+#undef DEFINE_LEXER_CONV_INTEGER
+            default:
+                return false;
+        }
+        return true;
+    }
+
+    lexer_t clexer::digit_return(lexer_t t, LEX_T(ulong) n, LEX_T(double) d, int i) {
+        if (t == l_int) {
+            bags._int = (int) n;
+        } else if (t == l_double) {
+            bags._double = d;
+        } else if (t == l_long) {
+            bags._long = n;
+        } else {
+            bags._double = d;
+        }
+        move(i - index);
+        return t;
+    }
+
+    // 参考自：https://github.com/bajdcc/CEval/blob/master/CEval/CEval.cpp#L105
+    lexer_t clexer::next_digit() {
+        // 假定这里的数字规则是以0-9开头
+        // 正则：^((?:\d+(\.)?\d*)(?:[eE][+-]?\d+)?)([uU])?([fFdCcSsDiIlL])?$
+        // 手动实现atof/atoi，并类型转换
+        // 其他功能：int溢出转double，e科学记数法
+        // 注意：这里不考虑负数，因为估计到歧义（可能是减法呢？）
+        auto _type = l_int; // 默认是整型
+        auto _postfix = l_none;
+        auto i = index;
+        auto n = 0ULL, _n = 0ULL;
+        auto d = 0.0D;
+        // 判断整数部分
+        for (; i < length && (isdigit(str[i])); i++) { // 解析整数部分
+            if (_type == l_double) { // 小数加位，溢出后自动转换
+                d *= 10.0;
+                d += str[i] - '0';
+            } else { // 整数加位
+                _n = n;
+                n *= 10;
+                n += str[i] - '0';
+            }
+            if (_type == l_int) { // 超过int范围，转为long
+                if (n > INT_MAX)
+                    _type = l_long;
+            } else if (_type == l_long) { // 超过long范围，转为double
+                if (n > LONG_LONG_MAX) {
+                    d = (double) _n;
+                    d *= 10.0;
+                    d += str[i] - '0';
+                    _type = l_double;
+                }
+            }
+        }
+        if (i == length) { // 只有整数部分
+            return digit_return(_type, n, d, i);
+        }
+        if ((_postfix = digit_type(_type, i)) != l_error) {
+            move(i - index);
+            return digit_from_integer(_postfix, n) ? _postfix : _type;
+        }
+        if (str[i] == '.') { // 解析小数部分
+            auto l = ++i;
+            for (; i < length && (isdigit(str[i])); i++) {
+                d *= 10.0;
+                d += str[i] - '0';
+            }
+            l = i - l;
+            if (l > 0) {
+                d = (double) n + calc_exp(d, -l);
+                _type = l_double;
+            }
+        }
+        if (i == length) { // 只有整数部分和小数部分
+            return digit_return(_type, n, d, i);
+        }
+        if ((_postfix = digit_type(_type, i)) != l_error) {
+            move(i - index);
+            if (_type == l_int)
+                return digit_from_integer(_postfix, n) ? _postfix : _type;
+            else
+                return digit_from_double(_postfix, d) ? _postfix : _type;
+        }
+        if (str[i] == 'e' || str[i] == 'E') { // 科学计数法强制转成double
+            auto neg = false;
+            auto e = 0;
+            if (_type != l_double) {
+                _type = l_double;
+                d = (double) n;
+            }
+            if (++i == length) {
+                return digit_return(_type, n, d, i);
+            }
+            if (!isdigit(str[i])) {
+                if (str[i] == '-') {
+                    if (++i == length)
+                        return digit_return(_type, n, d, i);
+                    neg = true;
+                } else if (str[i] == '+') {
+                    if (++i == length)
+                        return digit_return(_type, n, d, i);
+                } else {
+                    return digit_return(_type, n, d, i);
+                }
+            }
+            for (; i < length && (isdigit(str[i])); i++) { // 解析指数部分
+                e *= 10;
+                e += str[i] - '0';
+            }
+            d = calc_exp(d, neg ? -e : e);
+        }
+        if ((_postfix = digit_type(_type, i)) != l_error) {
+            move(i - index);
+            if (_type == l_int)
+                return digit_from_integer(_postfix, n) ? _postfix : _type;
+            else
+                return digit_from_double(_postfix, d) ? _postfix : _type;
+        }
+        return digit_return(_type, n, d, i);
     }
 
     lexer_t clexer::next_alpha() {
@@ -563,11 +704,9 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         for (;;) {
             if (std::regex_search(str.cbegin() + idx, str.cend(), sm, r_string)) {
                 idx += sm[0].length();
-                if (sm[1].matched) // like 'a'
-                {
+                if (sm[1].matched) { // like 'a'
                     auto c = sm[1].str()[0];
-                    if (c == '\"') // match end '"'
-                    {
+                    if (c == '\"') { // match end '"'
                         move(idx - index);
                         return l_string;
                     }
@@ -575,8 +714,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                     if (!isprint(c)) {
                         return record_error(e_invalid_string, 1);
                     }
-                } else if (sm[2].matched) // like \r, \n, ...
-                {
+                } else if (sm[2].matched) { // like \r, \n, ...
                     auto type = l_char;
                     switch (sm[2].str()[0]) {
                         case 'b':
@@ -610,16 +748,13 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                             type = l_error;
                             break;
                     }
-                } else if (sm[3].matched) // like '\0111'
-                {
+                } else if (sm[3].matched) { // like '\0111'
                     auto oct = std::strtol(sm[3].str().c_str(), NULL, 8);
                     bags._string += char(oct);
-                } else if (sm[4].matched) // like '\8'
-                {
+                } else if (sm[4].matched) { // like '\8'
                     auto n = std::atoi(sm[4].str().c_str());
                     bags._string += char(n);
-                } else if (sm[5].matched) // like '\xff'
-                {
+                } else if (sm[5].matched) { // like '\xff'
                     auto hex = std::strtol(sm[3].str().c_str(), NULL, 16);
                     bags._string += char(hex);
                 } else break;
@@ -632,14 +767,12 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         if (std::regex_search(str.cbegin() + index, str.cend(), sm, r_comment)) {
             auto ms = sm[0].str();
             auto ml = ms.length();
-            if (sm[1].matched) // comment like '// ...'
-            {
+            if (sm[1].matched) { // comment like '// ...'
                 bags._comment = sm[1].str();
                 move(ml);
                 return l_comment;
             }
-            if (sm[2].matched) // comment like '/* ... */'
-            {
+            if (sm[2].matched) { // comment like '/* ... */'
                 bags._comment = sm[2].str();
                 move(ml, std::count(bags._comment.begin(), bags._comment.end(), '\n'), true); // check new line
                 return l_comment;
@@ -681,7 +814,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
     void clexer::initMap() {
         // Keyword
         for (auto i = k__start + 1; i < k__end; i++) {
-            mapKeyword[keyword_string_list[(uint) i]] = (keyword_t) i;
+            mapKeyword[KEYWORD_STRING((keyword_t) i)] = (keyword_t) i;
         }
     }
 }
