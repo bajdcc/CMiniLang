@@ -667,7 +667,6 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                             move(i);
                             return l_char;
                         }
-                        return record_error(e_invalid_char, i);
                     }
                     return record_error(e_invalid_char, i);
                 }
@@ -683,9 +682,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                             move(i);
                             return l_char;
                         }
-                        return record_error(e_invalid_char, i);
                     }
-                    return record_error(e_invalid_char, i);
                 }
                 return record_error(e_invalid_char, i);
             } else if (i == 3) { // '?'
@@ -693,74 +690,88 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                 move(i);
                 return l_char;
             }
-            return record_error(e_invalid_char, 1);
         }
         return record_error(e_invalid_char, 1);
     }
 
     lexer_t clexer::next_string() {
-        auto idx = index + 1;
-        bags._string.clear();
-        for (;;) {
-            if (std::regex_search(str.cbegin() + idx, str.cend(), sm, r_string)) {
-                idx += sm[0].length();
-                if (sm[1].matched) { // like 'a'
-                    auto c = sm[1].str()[0];
-                    if (c == '\"') { // match end '"'
-                        move(idx - index);
-                        return l_string;
+        sint i;
+        auto prev = str[index];
+        // 寻找非'\"'的第一个'"'
+        for (i = 1; index + i < length && (prev == '\\' || (str[index + i]) != '"'); i++, prev = str[index + i]);
+        auto j = index + i;
+        if (j == length) { // " EOF
+            return record_error(e_invalid_string, i);
+        }
+        std::stringstream ss;
+        auto status = 1; // 状态机
+        char c = 0;
+        for (i = index + 1; i < j;) {
+            switch (status) {
+                case 1: { // 处理字符
+                    if (str[i] == '\\') {
+                        status = 2;
+                    } else { // '?'
+                        ss << str[i];
                     }
-                    bags._string += c;
-                    if (!isprint(c)) {
-                        return record_error(e_invalid_string, 1);
+                    i++;
+                }
+                    break;
+                case 2: { // 处理转义
+                    if (str[i] == 'x') {
+                        status = 3;
+                        i++;
+                    } else {
+                        auto esc = escape(str[i]);
+                        if (esc != -1) {
+                            ss << (char) esc;
+                            i++;
+                            status = 1;
+                        } else {
+                            status = 0; // 失败
+                        }
                     }
-                } else if (sm[2].matched) { // like \r, \n, ...
-                    auto type = l_char;
-                    switch (sm[2].str()[0]) {
-                        case 'b':
-                            bags._string += '\b';
-                            break;
-                        case 'f':
-                            bags._string += '\f';
-                            break;
-                        case 'n':
-                            bags._string += '\n';
-                            break;
-                        case 'r':
-                            bags._string += '\r';
-                            break;
-                        case 't':
-                            bags._string += '\t';
-                            break;
-                        case 'v':
-                            bags._string += '\v';
-                            break;
-                        case '\'':
-                            bags._string += '\'';
-                            break;
-                        case '\"':
-                            bags._string += '\"';
-                            break;
-                        case '\\':
-                            bags._string += '\\';
-                            break;
-                        default:
-                            type = l_error;
-                            break;
+                }
+                    break;
+                case 3: { // 处理 '\x??' 前一位十六进制数字
+                    auto esc = hex2dec(str[i]);
+                    if (esc != -1) {
+                        c = (char) esc;
+                        status = 4;
+                        i++;
+                    } else {
+                        status = 0; // 失败
                     }
-                } else if (sm[3].matched) { // like '\0111'
-                    auto oct = std::strtol(sm[3].str().c_str(), NULL, 8);
-                    bags._string += char(oct);
-                } else if (sm[4].matched) { // like '\8'
-                    auto n = std::atoi(sm[4].str().c_str());
-                    bags._string += char(n);
-                } else if (sm[5].matched) { // like '\xff'
-                    auto hex = std::strtol(sm[3].str().c_str(), NULL, 16);
-                    bags._string += char(hex);
-                } else break;
+                }
+                    break;
+                case 4: { // 处理 '\x??' 后一位十六进制数字
+                    auto esc = hex2dec(str[i]);
+                    if (esc != -1) {
+                        c *= 10;
+                        c += (char) esc;
+                        ss << c;
+                        status = 1;
+                        i++;
+                    } else {
+                        ss << c;
+                        status = 1;
+                    }
+                }
+                    break;
+                default: // 失败
+                    bags._string = str.substr(index + 1, j - index - 1);
+                    move(j - index + 1);
+                    return l_string;
             }
         }
-        return expect(1, e_invalid_string, r_expect_nonstr, length - index);
+        if (status == 1) { // 为初态/终态
+            bags._string = ss.str();
+            move(j - index + 1);
+            return l_string;
+        }
+        bags._string = str.substr(index + 1, j - index - 1);
+        move(j - index + 1);
+        return l_string;
     }
 
     lexer_t clexer::next_comment() {
