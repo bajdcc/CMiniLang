@@ -36,7 +36,7 @@ namespace clib {
                        err.str.c_str());
             }
         } while (token == l_newline || token == l_space || token == l_comment || token == l_error);
-#if 1
+#if 0
         if (token != l_end) {
             printf("[%04d:%03d] %-12s - %s\n",
                    lexer.get_last_line(),
@@ -363,18 +363,20 @@ namespace clib {
         ptr_level = 0; \
     }
 
-                MATCH_BINOP(op_bit_or, OR, op_bit_xor)MATCH_BINOP(op_bit_xor, XOR, op_bit_and)MATCH_BINOP(op_bit_and,
-                                                                                                          AND,
-                                                                                                          op_equal)MATCH_BINOP(
-                    op_equal, EQ, op_not_equal)MATCH_BINOP(op_not_equal, NE, op_less_than)MATCH_BINOP(op_less_than,
-                                                                                                      LT,
-                                                                                                      op_left_shift)MATCH_BINOP(
-                    op_less_than_or_equal, LE, op_left_shift)MATCH_BINOP(op_greater_than, GT,
-                                                                         op_left_shift)MATCH_BINOP(
-                    op_greater_than_or_equal, GE, op_left_shift)MATCH_BINOP(op_left_shift, SHL, op_plus)MATCH_BINOP(
-                    op_right_shift, SHR, op_plus)MATCH_BINOP(op_times, MUL, op_plus_plus)MATCH_BINOP(op_divide, DIV,
-                                                                                                     op_plus_plus)MATCH_BINOP(
-                    op_mod, MOD, op_plus_plus)
+                MATCH_BINOP(op_bit_or, OR, op_bit_xor)
+                MATCH_BINOP(op_bit_xor, XOR, op_bit_and)
+                MATCH_BINOP(op_bit_and, AND, op_equal)
+                MATCH_BINOP(op_equal, EQ, op_not_equal)
+                MATCH_BINOP(op_not_equal, NE, op_less_than)
+                MATCH_BINOP(op_less_than, LT, op_left_shift)
+                MATCH_BINOP(op_less_than_or_equal, LE, op_left_shift)
+                MATCH_BINOP(op_greater_than, GT, op_left_shift)
+                MATCH_BINOP(op_greater_than_or_equal, GE, op_left_shift)
+                MATCH_BINOP(op_left_shift, SHL, op_plus)
+                MATCH_BINOP(op_right_shift, SHR, op_plus)
+                MATCH_BINOP(op_times, MUL, op_plus_plus)
+                MATCH_BINOP(op_divide, DIV, op_plus_plus)
+                MATCH_BINOP(op_mod, MOD, op_plus_plus)
 #undef MATCH_BINOP
                 else if (lexer.is_operator(op_plus)) {
                     // add

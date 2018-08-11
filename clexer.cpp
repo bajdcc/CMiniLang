@@ -633,6 +633,17 @@ LEX_T(t) clexer::get_store_##t(int index) const \
     }
 
     lexer_t clexer::next_char() {
+        // 提前判定 '\'' 及 '\\' 这两种特殊情况（向前看）
+        if (local(1) == '\\' && local(3) == '\'') {
+            auto c = local(2);
+            auto esc = escape((char) c); // '\?'
+            if (esc != -1) {
+                bags._char = (char) esc;
+                move(4);
+                return l_char;
+            }
+            return record_error(e_invalid_char, 4);
+        }
         sint i;
         // 寻找 '\'' 的右边界（限定）
         for (i = 1; index + i < length && str[index + i] != '\'' && i <= 4; i++);
@@ -646,15 +657,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                 if (i == 3) { // '\'
                     return record_error(e_invalid_char, i);
                 }
-                if (i == 4) { // '\?'
-                    auto esc = escape(str[index + 2]);
-                    if (esc != -1) {
-                        bags._char = (char) esc;
-                        move(i);
-                        return l_char;
-                    }
-                    return record_error(e_invalid_char, i);
-                }
+                // i 不可能为 4
                 if (i == 5) { // '\x?'
                     if (str[index + 1] == '\\' && str[index + 2] == 'x') {
                         auto esc = hex2dec(str[index + 3]);
@@ -774,7 +777,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         sint i = index;
         if (str[++i] == '/') { // '//'
             // 寻找第一个换行符
-            for (++i; index + i < length && (str[i] != '\n' && str[i] != '\r'); i++);
+            for (++i; i < length && (str[i] != '\n' && str[i] != '\r'); i++);
             bags._comment = str.substr(index + 2, i - index - 2);
             move(i - index);
             return l_comment;
@@ -782,7 +785,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
             // 寻找第一个 '*/'
             char prev = 0;
             auto newline = 0;
-            for (++i; index + i < length && (prev != '*' || (str[i]) != '/');
+            for (++i; i < length && (prev != '*' || (str[i]) != '/');
                  prev = str[i++], prev == '\n' ? ++newline : 0);
             i++;
             bags._comment = str.substr(index + 2, i - index - 1);
@@ -858,8 +861,14 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                     } else if (c == '-' && c2 == '>') { // '->'
                         p = op_pointer;
                     }
-                    if (p == op__start) {
-                        return record_error(e_invalid_operator, 2);
+                    if (p == op__start) { // 双字符非法，则回退到单字符
+                        auto p = sinOp[c];
+                        if (p == 0) {
+                            return record_error(e_invalid_operator, 1);
+                        }
+                        bags._operator = (operator_t) p;
+                        move(1);
+                        return l_operator;
                     } else {
                         bags._operator = (operator_t) p;
                         move(2);

@@ -4,6 +4,7 @@
 //
 
 #include <cstdio>
+#include <fstream>
 #include "cparser.h"
 
 extern int g_argc;
@@ -54,11 +55,30 @@ int main()
     hanoi(3, 'A', 'B', 'C');
     return 0;
 })";
-
+#if 0
     try {
         clib::cparser p(txt);
     } catch (const std::exception& e) {
         printf("ERROR: %s\n", e.what());
     }
+#else
+    g_argc--;
+    g_argv++;
+    if (g_argc < 1) {
+        printf("Usage: CMiniLang file ...\n");
+        return -1;
+    }
+    std::ifstream in(*g_argv);
+    std::istreambuf_iterator<char> beg(in), end;
+    std::string str(beg, end);
+    if (str.empty()) {
+        exit(-1);
+    }
+    try {
+        clib::cparser p(str);
+    } catch (const std::exception& e) {
+        printf("ERROR: %s\n", e.what());
+    }
+#endif
     return 0;
 }
