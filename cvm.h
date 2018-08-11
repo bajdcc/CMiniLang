@@ -6,6 +6,7 @@
 #ifndef CMINILANG_VM_H
 #define CMINILANG_VM_H
 
+#include <vector>
 #include "types.h"
 #include "memory.h"
 

@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <climits>
+#include <sstream>
 #include "clexer.h"
 
 namespace clib {
@@ -63,21 +64,18 @@ LEX_T(t) clexer::get_store_##t(int index) const \
     DEFINE_LEXER_GETTER(string)
 #undef DEFINE_LEXER_GETTER
 
-    bool match_pred(smatch_t::value_type sm) {
-        return sm.matched;
-    }
-
+    // 记录错误
     lexer_t clexer::record_error(error_t error, int skip) {
         err_record_t err{};
-        err.line = line;
-        err.column = column;
-        err.start_idx = index;
-        err.end_idx = index + skip;
-        err.err = error;
-        err.str = str.substr(err.start_idx, err.end_idx - err.start_idx);
+        err.line = line; // 起始行
+        err.column = column; // 起始列
+        err.start_idx = index; // 文本起始位置
+        err.end_idx = index + skip; // 文本结束位置
+        err.err = error; // 错误类型
+        err.str = str.substr(err.start_idx, err.end_idx - err.start_idx); // 错误字符
         records.push_back(err);
         bags._error = error;
-        move(skip);
+        move(skip); // 略过错误文本
         return l_error;
     }
 
@@ -108,11 +106,11 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                 type = next_comment();
             } else if (c2 != -1) { // 操作符
                 type = next_operator();
-            } else {
+            } else { // '/'
                 bags._operator = op_divide;
                 type = l_operator;
             }
-        } else {
+        } else { // 最后才检查操作符
             type = next_operator();
         }
         return type;
@@ -308,18 +306,15 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         return l_error;
     }
 
-    void clexer::move(int idx, int inc, bool newline) {
+    void clexer::move(int idx, int inc) {
         last_index = index;
         last_line = line;
         last_column = column;
-        if (newline) {
+        if (inc < 0) {
+            column += idx;
+        } else {
             column = 1;
             line += inc;
-        } else {
-            if (inc < 0)
-                column += idx;
-            else
-                column += inc;
         }
         index += idx;
     }
@@ -338,6 +333,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         return d;
     }
 
+    // 转无符号类型
     static lexer_t unsigned_type(lexer_t t) {
         switch (t) {
             case l_char:
@@ -353,6 +349,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         }
     }
 
+    // 数字类型后缀
     static lexer_t digit_type_postfix(char c) {
         switch (c) {
             case 'C':
@@ -378,6 +375,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         }
     }
 
+    // 数字类型后缀（带无符号）
     lexer_t clexer::digit_type(lexer_t t, int i) {
         if (i == length) {
             return l_error;
@@ -435,6 +433,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         return true;
     }
 
+    // 返回数字（依照目前识别的类型）
     lexer_t clexer::digit_return(lexer_t t, LEX_T(ulong) n, LEX_T(double) d, int i) {
         if (t == l_int) {
             bags._int = (int) n;
@@ -460,7 +459,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         auto _postfix = l_none;
         auto i = index;
         auto n = 0ULL, _n = 0ULL;
-        auto d = 0.0D;
+        auto d = 0.0;
         // 判断整数部分
         for (; i < length && (isdigit(str[i])); i++) { // 解析整数部分
             if (_type == l_double) { // 小数加位，溢出后自动转换
@@ -486,7 +485,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         if (i == length) { // 只有整数部分
             return digit_return(_type, n, d, i);
         }
-        if ((_postfix = digit_type(_type, i)) != l_error) {
+        if ((_postfix = digit_type(_type, i)) != l_error) { // 判断有无后缀
             move(i - index);
             return digit_from_integer(_postfix, n) ? _postfix : _type;
         }
@@ -505,7 +504,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         if (i == length) { // 只有整数部分和小数部分
             return digit_return(_type, n, d, i);
         }
-        if ((_postfix = digit_type(_type, i)) != l_error) {
+        if ((_postfix = digit_type(_type, i)) != l_error) { // 判断有无后缀
             move(i - index);
             if (_type == l_int)
                 return digit_from_integer(_postfix, n) ? _postfix : _type;
@@ -523,11 +522,11 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                 return digit_return(_type, n, d, i);
             }
             if (!isdigit(str[i])) {
-                if (str[i] == '-') {
+                if (str[i] == '-') { // 1e-1
                     if (++i == length)
                         return digit_return(_type, n, d, i);
                     neg = true;
-                } else if (str[i] == '+') {
+                } else if (str[i] == '+') { // 1e+1
                     if (++i == length)
                         return digit_return(_type, n, d, i);
                 } else {
@@ -540,7 +539,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
             }
             d = calc_exp(d, neg ? -e : e);
         }
-        if ((_postfix = digit_type(_type, i)) != l_error) {
+        if ((_postfix = digit_type(_type, i)) != l_error) { // 判断有无后缀
             move(i - index);
             if (_type == l_int)
                 return digit_from_integer(_postfix, n) ? _postfix : _type;
@@ -555,7 +554,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         for (i = index + 1; i < length && (isalnum(str[i]) || str[i] == '_'); i++);
         auto s = str.substr(index, i - index);
         auto kw = mapKeyword.find(s);
-        if (kw != mapKeyword.end()) { // 关键字
+        if (kw != mapKeyword.end()) { // 哈希查找关键字
             bags._keyword = kw->second;
             move(s.length());
             return l_keyword;
@@ -571,16 +570,18 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         switch (str[index]) {
             case ' ':
             case '\t':
+                // 查找连续的空格或Tab
                 for (i = index + 1; i < length && (str[i] == ' ' || str[i] == '\t'); i++);
                 bags._space = i - index;
                 move(bags._space);
                 return l_space;
             case '\r':
             case '\n':
+                // 查找连续的'\n'或'\r\n'
                 for (i = index, j = 0; i < length &&
                                        (str[i] == '\r' || (str[i] == '\n' ? ++j > 0 : false)); i++);
                 bags._newline = j;
-                move(i - index, bags._newline, true);
+                move(i - index, bags._newline);
                 return l_newline;
         }
         assert(!"space not match"); // cannot reach
@@ -588,6 +589,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         return l_error;
     }
 
+    // 十六进制字符转十进制
     static int hex2dec(char c) {
         if (c >= '0' && c <= '9') {
             return c - '0';
@@ -600,6 +602,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         }
     }
 
+    // 单字符转义
     static int escape(char c) {
         if (c >= '0' && c <= '9') {
             return c - '0';
@@ -631,6 +634,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
 
     lexer_t clexer::next_char() {
         sint i;
+        // 寻找 '\'' 的右边界（限定）
         for (i = 1; index + i < length && str[index + i] != '\'' && i <= 4; i++);
         if (i == 1) { // ''
             return record_error(e_invalid_char, i + 1);
@@ -664,10 +668,10 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                 }
                 // '\x??'
                 if (str[index + 1] == '\\' && str[index + 2] == 'x') {
-                    auto esc = hex2dec(str[index + 3]);
+                    auto esc = hex2dec(str[index + 3]); // '\x?_'
                     if (esc != -1) {
                         bags._char = (char) esc;
-                        esc = hex2dec(str[index + 4]);
+                        esc = hex2dec(str[index + 4]); // '\x_?'
                         if (esc != -1) {
                             bags._char *= 0x10;
                             bags._char += (char) esc;
@@ -687,13 +691,13 @@ LEX_T(t) clexer::get_store_##t(int index) const \
     }
 
     lexer_t clexer::next_string() {
-        sint i;
-        auto prev = str[index];
+        sint i = index;
+        auto prev = str[i];
         // 寻找非'\"'的第一个'"'
-        for (i = 1; index + i < length && (prev == '\\' || (str[index + i]) != '"'); i++, prev = str[index + i]);
-        auto j = index + i;
+        for (i++; i < length && (prev == '\\' || (str[i]) != '"'); prev = str[i++]);
+        auto j = i;
         if (j == length) { // " EOF
-            return record_error(e_invalid_string, i);
+            return record_error(e_invalid_string, i - index);
         }
         std::stringstream ss;
         auto status = 1; // 状态机
@@ -767,34 +771,36 @@ LEX_T(t) clexer::get_store_##t(int index) const \
     }
 
     lexer_t clexer::next_comment() {
-        if (std::regex_search(str.cbegin() + index, str.cend(), sm, r_comment)) {
-            auto ms = sm[0].str();
-            auto ml = ms.length();
-            if (sm[1].matched) { // comment like '// ...'
-                bags._comment = sm[1].str();
-                move(ml);
-                return l_comment;
-            }
-            if (sm[2].matched) { // comment like '/* ... */'
-                bags._comment = sm[2].str();
-                move(ml, std::count(bags._comment.begin(), bags._comment.end(), '\n'), true); // check new line
-                return l_comment;
-            }
+        sint i = index;
+        if (str[++i] == '/') { // '//'
+            // 寻找第一个换行符
+            for (++i; index + i < length && (str[i] != '\n' && str[i] != '\r'); i++);
+            bags._comment = str.substr(index + 2, i - index - 2);
+            move(i - index);
+            return l_comment;
+        } else { // '/*  */'
+            // 寻找第一个 '*/'
+            char prev = 0;
+            auto newline = 0;
+            for (++i; index + i < length && (prev != '*' || (str[i]) != '/');
+                 prev = str[i++], prev == '\n' ? ++newline : 0);
+            i++;
+            bags._comment = str.substr(index + 2, i - index - 1);
+            move(i - index, newline); // 检查换行
+            return l_comment;
         }
-        move(length - index); // move to end
-        return record_error(e_invalid_comment, length - index);
     }
 
     lexer_t clexer::next_operator() {
         auto c = local();
-        if (bitOp[0].test((uint) c)) {
+        if (bitOp[0].test((uint) c)) { // 操作符第一个char判断非法
             auto c2 = local(1);
-            if (c2 != -1 && bitOp[1].test((uint) c2)) {
+            if (c2 != -1 && bitOp[1].test((uint) c2)) { // 操作符第二个char判断非法，否则解析单字符操作符
                 auto c3 = local(2);
-                if (c3 != -1 && (c3 == '=' || c3 == '.')) {
+                if (c3 != -1 && (c3 == '=' || c3 == '.')) { // 操作符第三个char判断非法，否则解析双字符操作符
                     // 三字符操作符
                     auto p = op__start;
-                    if (c3 == '=') {
+                    if (c3 == '=') { // 手动判断
                         if (c == c2) {
                             if (c == '<') {
                                 p = op_left_shift_assign;
@@ -802,7 +808,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                                 p = op_left_shift_assign;
                             }
                         }
-                    } else if (c3 == '.') {
+                    } else {
                         if (c == '.' && c2 == '.') {
                             p = op_ellipsis;
                         }
@@ -821,12 +827,12 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                         if (p == 0 || p > op_logical_not) {
                             return record_error(e_invalid_operator, 2);
                         }
-                        bags._operator = (operator_t) (p + 1);
+                        bags._operator = (operator_t) (p + 1); // 从 '?' 到 '?='
                         move(2);
                         return l_operator;
                     }
                     auto p = op__start;
-                    if (c == c2) {
+                    if (c == c2) { // 相同位的双字符操作符
                         switch (c2) {
                             case '+':
                                 p = op_plus_plus;
@@ -849,7 +855,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                             default:
                                 break;
                         }
-                    } else if (c == '-' && c2 == '>') {
+                    } else if (c == '-' && c2 == '>') { // '->'
                         p = op_pointer;
                     }
                     if (p == op__start) {
@@ -897,11 +903,11 @@ LEX_T(t) clexer::get_store_##t(int index) const \
             const auto &op = OP_STRING((operator_t) i);
             len = op.length();
             if (len == 1) {
-                sinOp[op[0]] = (operator_t) i;
+                sinOp[op[0]] = (operator_t) i; // 操作符第一位char映射
             }
             len = std::min(len, 2);
             for (auto j = 0; j < len; j++) {
-                bitOp[j].set((uint) op[j]);
+                bitOp[j].set((uint) op[j]); // 操作符第一/二位char二进制查找
             }
         }
     }

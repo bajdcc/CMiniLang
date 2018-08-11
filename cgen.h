@@ -7,6 +7,8 @@
 #define CMINILANG_GEN_H
 
 #include <map>
+#include <memory>
+#include <vector>
 #include "types.h"
 #include "memory.h"
 

@@ -5,6 +5,8 @@
 #ifndef CMINILANG_LEXER_H
 #define CMINILANG_LEXER_H
 
+#include <bitset>
+#include <vector>
 #include "types.h"
 
 namespace clib {
@@ -83,7 +85,7 @@ namespace clib {
         lexer_t digit_return(lexer_t t, LEX_T(ulong) n, LEX_T(double) d, int i);
 
     private:
-        void move(int idx, int inc = -1, bool newline = false);
+        void move(int idx, int inc = -1);
 
         // 内部解析
         lexer_t next_digit();
@@ -176,11 +178,6 @@ namespace clib {
         std::array<operator_t, 0x100> sinOp;
 
         void initMap();
-
-        // 正则表达式
-        smatch_t sm;
-        regex_t r_comment{R"((?://([^\r\n]*))|(?:/\*([[:print:]\n]*?)\*/))",
-                          std::regex::ECMAScript | std::regex::optimize};
     };
 }
 

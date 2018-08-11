@@ -6,12 +6,9 @@
 #define CMINILANG_TYPES_H
 
 #include <string>
-#include <regex>
 #include <unordered_map>
 
 using string_t = std::string;
-using smatch_t = std::smatch;
-using regex_t = std::regex;
 template<class K, class V> using map_t = std::unordered_map<K, V>;
 
 namespace clib {
