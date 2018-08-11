@@ -66,6 +66,7 @@ void next() {
     int hash;
 
     while (token = *src) {
+        printf("%d:%x %d %c\n", line, src-old_src, token, token);
         ++src;
 
         if (token == '\n') {
@@ -1230,11 +1231,11 @@ int eval() {
         op = *pc++; // get next operation code
 
         // print debug info
-        if (debug) {
+        if (0) {
             printf("%04d> [%02d] ", cycle, op);
-            printf("%s", trans(& "LEA \0IMM \0JMP \0CALL\0JZ  \0JNZ \0ENT \0ADJ \0LEV \0LI  \0LC  \0SI  \0SC  \0PUSH\0"
+            printf(&"LEA \0IMM \0JMP \0CALL\0JZ  \0JNZ \0ENT \0ADJ \0LEV \0LI  \0LC  \0SI  \0SC  \0PUSH\0"
                    "OR  \0XOR \0AND \0EQ  \0NE  \0LT  \0GT  \0LE  \0GE  \0SHL \0SHR \0ADD \0SUB \0MUL \0DIV \0MOD \0"
-                   "OPEN\0READ\0CLOS\0PRTF\0MALC\0MSET\0MCMP\0EXIT"[op * 5]));
+                   "OPEN\0READ\0CLOS\0PRTF\0MALC\0MSET\0MCMP\0EXIT"[op * 5]);
             if (op <= ADJ)
                 printf(" %08X\n", *pc);
             else if (op == PRTF)
@@ -1287,7 +1288,7 @@ int eval() {
             printf("unknown instruction:%d\n", op);
             return 0-1;
         }
-        if (debug) {
+        if (0) {
             stack_ptr = sp;
             stack_top = (int)stack + poolsize;
             printf("\n---------------- STACK BEGIN <<<< \n");
@@ -1306,7 +1307,7 @@ int main(int argc, char **argv)
     int i, fd;
     int *tmp;
 
-    argc--;
+    argc = argc - 1;
     argv++;
 
     debug = 0;
@@ -1332,7 +1333,7 @@ int main(int argc, char **argv)
         return 0-1;
     }
 
-    poolsize = 16 * 1024; // arbitrary size
+    poolsize = 64 * 1024; // arbitrary size
     line = 1;
 
     // allocate memory
@@ -1387,7 +1388,7 @@ int main(int argc, char **argv)
         return 0-1;
     }
     // read the source file
-    if ((i = read(fd, src, 10240)) <= 0) {
+    if ((i = read(fd, src, poolsize)) <= 0) {
         printf("read() returned %d\n", i);
         return 0-1;
     }

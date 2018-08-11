@@ -77,7 +77,7 @@ namespace clib {
 #define SEGMENT_MASK 0x0fffffff
 
 /* 物理内存(单位：16B) */
-#define PHY_MEM (16 * 1024)
+#define PHY_MEM (64 * 1024)
 /* 堆内存(单位：16B) */
 #define HEAP_MEM (256 * 1024)
 

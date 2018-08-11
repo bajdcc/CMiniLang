@@ -49,7 +49,7 @@ int main()
     printf("##### fibonacci #####\n");
     while (i <= 10) {
         printf("fibonacci(%2d) = %d\n", i, fibonacci(i));
-        i = i + 1;
+        i++;
     }
     printf("##### hanoi #####\n");
     hanoi(3, 'A', 'B', 'C');

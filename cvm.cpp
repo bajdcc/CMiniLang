@@ -13,7 +13,6 @@ char **g_argv;
 
 namespace clib {
 
-#define LOG 0
 #define INC_PTR 4
 #define VMM_ARG(s, p) ((s) + p * INC_PTR)
 #define VMM_ARGS(t, n) vmm_get(t - (n) * INC_PTR)
@@ -498,7 +497,7 @@ namespace clib {
                     break;
                 case OPEN: {
                     init_args(args, sp, pc);
-                    ax = (int) fopen(vmm_getstr(args[0]), "r");
+                    ax = (int) fopen(vmm_getstr(args[0]), "rb");
 #if 0
                     printf("OPEN> name=%s fd=%08X\n", vmm_getstr(args[0]), ax);
 #endif
