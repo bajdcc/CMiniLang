@@ -448,10 +448,24 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         return t;
     }
 
+    // 十六进制字符转十进制
+    static int hex2dec(char c) {
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        } else if (c >= 'a' && c <= 'f') {
+            return c - 'a' + 10;
+        } else if (c >= 'A' && c <= 'F') {
+            return c - 'A' + 10;
+        } else {
+            return -1;
+        }
+    }
+
     // 参考自：https://github.com/bajdcc/CEval/blob/master/CEval/CEval.cpp#L105
     lexer_t clexer::next_digit() {
         // 假定这里的数字规则是以0-9开头
         // 正则：^((?:\d+(\.)?\d*)(?:[eE][+-]?\d+)?)([uU])?([fFdCcSsDiIlL])?$
+        // 正则：^0[Xx][0-9A-Fa-f]+$
         // 手动实现atof/atoi，并类型转换
         // 其他功能：int溢出转double，e科学记数法
         // 注意：这里不考虑负数，因为估计到歧义（可能是减法呢？）
@@ -460,6 +474,32 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         auto i = index;
         auto n = 0ULL, _n = 0ULL;
         auto d = 0.0;
+        if (local() == '0' && (local(1) == 'x' || local(1) == 'x')) {
+            auto cc = 0;
+            // 预先判断十六进制
+            for (i += 2; i < length && ((cc = hex2dec(str[i])) != -1); i++) { // 解析整数部分
+                if (_type == l_double) { // 小数加位，溢出后自动转换
+                    d *= 16.0;
+                    d += cc;
+                } else { // 整数加位
+                    _n = n;
+                    n <<= 4;
+                    n += cc;
+                }
+                if (_type == l_int) { // 超过int范围，转为long
+                    if (n > INT_MAX)
+                        _type = l_long;
+                } else if (_type == l_long) { // 超过long范围，转为double
+                    if (n > LONG_LONG_MAX) {
+                        d = (double) _n;
+                        d *= 16.0;
+                        d += cc;
+                        _type = l_double;
+                    }
+                }
+            }
+            return digit_return(_type, n, d, i);
+        }
         // 判断整数部分
         for (; i < length && (isdigit(str[i])); i++) { // 解析整数部分
             if (_type == l_double) { // 小数加位，溢出后自动转换
@@ -587,19 +627,6 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         assert(!"space not match"); // cannot reach
         move(1);
         return l_error;
-    }
-
-    // 十六进制字符转十进制
-    static int hex2dec(char c) {
-        if (c >= '0' && c <= '9') {
-            return c - '0';
-        } else if (c >= 'a' && c <= 'f') {
-            return c - 'a' + 10;
-        } else if (c >= 'A' && c <= 'F') {
-            return c - 'A' + 10;
-        } else {
-            return -1;
-        }
     }
 
     // 单字符转义

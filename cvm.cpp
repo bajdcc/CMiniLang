@@ -105,6 +105,9 @@ namespace clib {
             return (char *) pa + OFFSET_INDEX(va);
         }
         vmm_map(va, pmm_alloc(), PTE_U | PTE_P | PTE_R);
+#if 0
+        printf("VMMSTR> Invalid VA: %08X\n", va);
+#endif
         assert(0);
         return vmm_getstr(va);
     }
@@ -116,6 +119,9 @@ namespace clib {
             return *(T *) ((byte *) pa + OFFSET_INDEX(va));
         }
         vmm_map(va, pmm_alloc(), PTE_U | PTE_P | PTE_R);
+#if 1
+        printf("VMMGET> Invalid VA: %08X\n", va);
+#endif
         assert(0);
         return vmm_get<T>(va);
     }
@@ -128,6 +134,9 @@ namespace clib {
             return value;
         }
         vmm_map(va, pmm_alloc(), PTE_U | PTE_P | PTE_R);
+#if 0
+        printf("VMMSET> Invalid VA: %08X\n", va);
+#endif
         assert(0);
         return vmm_set(va, value);
     }

@@ -175,7 +175,7 @@ template<> \
 struct base_t<t> \
 { \
     using type = obj; \
-    static const int size = sizeof(t); \
+    static const int size = sizeof(obj); \
 };
 
     DEFINE_BASE_TYPE(l_ptr, void*)

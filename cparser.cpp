@@ -398,7 +398,6 @@ namespace clib {
                     match_operator(op_minus);
                     gen.emit(PUSH);
                     expression(op_times);
-                    expr_type = l_int;
                     ptr_level = ptr;
                     expr_type = tmp;
                     if (ptr > 0 && (ptr != 1 || expr_type != l_char)) {
