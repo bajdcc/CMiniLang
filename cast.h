@@ -8,7 +8,7 @@
 
 #include "memory.h"
 
-#define AST_NODE_MEM (16 * 1024)
+#define AST_NODE_MEM (32 * 1024)
 #define AST_STR_MEM (16 * 1024)
 
 namespace clib {
@@ -24,13 +24,16 @@ namespace clib {
         ast_param,
         ast_block,
         ast_exp,
+        ast_exp_param,
         ast_stmt,
+        ast_return,
         ast_sinop,
         ast_binop,
         ast_triop,
         ast_if,
         ast_while,
         ast_invoke,
+        ast_empty,
         ast_id,
         ast_type,
         ast_cast,

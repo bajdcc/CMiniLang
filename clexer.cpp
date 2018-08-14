@@ -228,7 +228,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
     }
 
     bool clexer::is_integer() const {
-        return get_type() >= l_char && get_type() <= l_long;
+        return get_type() >= l_char && get_type() <= l_ulong;
     }
 
     bool clexer::is_basetype() const {
@@ -249,7 +249,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         return false;
     }
 
-    LEX_T(uint) clexer::get_integer() const {
+    LEX_T(int) clexer::get_integer() const {
         assert(is_integer());
         switch (type) {
 #define DEFINE_LEXER_CASE(t) case l_##t: return get_##t();

@@ -312,7 +312,7 @@ void match(int tk) {
         next();
     } else {
         printf("%d: expected token: %d\n", line, tk);
-        exit(0-1);
+        exit(-1);
     }
 }
 
@@ -338,7 +338,7 @@ void expression(int level) {
     {
         if (!token) {
             printf("%d: unexpected token EOF of expression\n", line);
-            exit(0-1);
+            exit(-1);
         }
         if (token == Num) {
             match(Num);
@@ -440,7 +440,7 @@ void expression(int level) {
                 }
                 else {
                     printf("%d: bad function call\n", line);
-                    exit(0-1);
+                    exit(-1);
                 }
 
                 // clean the stack for arguments
@@ -470,7 +470,7 @@ void expression(int level) {
                 }
                 else {
                     printf("%d: undefined variable\n", line);
-                    exit(0-1);
+                    exit(-1);
                 }
 
                 // emit code, default behaviour is to load the value of the
@@ -513,7 +513,7 @@ void expression(int level) {
                 ptr_level--;
             } else {
                 printf("%d: bad dereference\n", line);
-                exit(0-1);
+                exit(-1);
             }
 
             *++text = (ptr_level > 0) ? LI : (expr_type == CHAR) ? LC : LI;
@@ -526,7 +526,7 @@ void expression(int level) {
                 text--;
             } else {
                 printf("%d: bad address of\n", line);
-                exit(0-1);
+                exit(-1);
             }
 
             ptr_level++;
@@ -550,10 +550,10 @@ void expression(int level) {
             match('~');
             expression(Inc);
 
-            // emit code, use <expr> XOR 0-1
+            // emit code, use <expr> XOR -1
             *++text = PUSH;
             *++text = IMM;
-            *++text = 0-1;
+            *++text = -1;
             *++text = XOR;
 
             expr_type = INT;
@@ -577,7 +577,7 @@ void expression(int level) {
                 match(Num);
             } else {
                 *++text = IMM;
-                *++text = 0-1;
+                *++text = -1;
                 *++text = PUSH;
                 expression(Inc);
                 *++text = MUL;
@@ -598,7 +598,7 @@ void expression(int level) {
                 *++text = LI;
             } else {
                 printf("%d: bad lvalue of pre-increment\n", line);
-                exit(0-1);
+                exit(-1);
             }
             *++text = PUSH;
             *++text = IMM;
@@ -608,7 +608,7 @@ void expression(int level) {
         }
         else {
             printf("%d: bad expression\n", line);
-            exit(0-1);
+            exit(-1);
         }
     }
 
@@ -626,7 +626,7 @@ void expression(int level) {
                     *text = PUSH; // save the lvalue's pointer
                 } else {
                     printf("%d: bad lvalue in assignment\n", line);
-                    exit(0-1);
+                    exit(-1);
                 }
 
                 expr_type = tmp;
@@ -643,7 +643,7 @@ void expression(int level) {
                     match(':');
                 } else {
                     printf("%d: missing colon in conditional\n", line);
-                    exit(0-1);
+                    exit(-1);
                 }
                 *addr = (int)(text + 3);
                 *++text = JMP;
@@ -845,7 +845,7 @@ void expression(int level) {
                 }
                 else {
                     printf("%d: bad value in increment\n", line);
-                    exit(0-1);
+                    exit(-1);
                 }
 
                 *++text = PUSH;
@@ -880,12 +880,12 @@ void expression(int level) {
                     ptr_level = ptr - 1;
                 } else {
                     printf("%d: pointer type expected\n", line);
-                    exit(0-1);
+                    exit(-1);
                 }
             }
             else {
                 printf("%d: compiler error, token = %d\n", line, token);
-                exit(0-1);
+                exit(-1);
             }
         }
     }
@@ -1003,7 +1003,7 @@ void enum_declaration() {
     while (token != '}') {
         if (token != Id) {
             printf("%d: bad enum identifier %d\n", line, token);
-            exit(0-1);
+            exit(-1);
         }
         next();
         if (token == Assign) {
@@ -1011,7 +1011,7 @@ void enum_declaration() {
             next();
             if (token != Num) {
                 printf("%d: bad enum initializer\n", line);
-                exit(0-1);
+                exit(-1);
             }
             i = token_val;
             next();
@@ -1051,11 +1051,11 @@ void function_parameter() {
         // parameter name
         if (token != Id) {
             printf("%d: bad parameter declaration\n", line);
-            exit(0-1);
+            exit(-1);
         }
         if (current_id[Class] == Loc) {
             printf("%d: duplicate parameter declaration\n", line);
-            exit(0-1);
+            exit(-1);
         }
 
         match(Id);
@@ -1101,12 +1101,12 @@ void function_body() {
             if (token != Id) {
                 // invalid declaration
                 printf("%d: bad local declaration\n", line);
-                exit(0-1);
+                exit(-1);
             }
             if (current_id[Class] == Loc) {
                 // identifier exists
                 printf("%d: duplicate local declaration\n", line);
-                exit(0-1);
+                exit(-1);
             }
             match(Id);
 
@@ -1208,12 +1208,12 @@ void global_declaration() {
         if (token != Id) {
             // invalid declaration
             printf("%d: bad global declaration\n", line);
-            exit(0-1);
+            exit(-1);
         }
         if (current_id[Class]) {
             // identifier exists
             printf("%d: duplicate global declaration\n", line);
-            exit(0-1);
+            exit(-1);
         }
         match(Id);
         current_id[Type] = type;
@@ -1320,7 +1320,7 @@ int eval() {
         else if (op == MCMP) { ax = memcmp((char *)sp[2], (char *)sp[1], *sp);}
         else {
             printf("unknown instruction:%d\n", op);
-            return 0-1;
+            return -1;
         }
         if (0) {
             stack_ptr = sp;
@@ -1341,7 +1341,7 @@ int main(int argc, char **argv)
     int i, fd;
     int *tmp;
 
-    argc = argc - 1;
+    argc--;
     argv++;
 
     debug = 0;
@@ -1359,12 +1359,12 @@ int main(int argc, char **argv)
     }
     if (argc < 1) {
         printf("usage: xc [-s] [-d] file ...\n");
-        return 0-1;
+        return -1;
     }
 
     if ((fd = open(*argv, 0)) < 0) {
         printf("could not open(%s)\n", *argv);
-        return 0-1;
+        return -1;
     }
 
     poolsize = 64 * 1024; // arbitrary size
@@ -1373,19 +1373,19 @@ int main(int argc, char **argv)
     // allocate memory
     if (!(text = malloc(poolsize))) {
         printf("could not malloc(%d) for text area\n", poolsize);
-        return 0-1;
+        return -1;
     }
     if (!(data = malloc(poolsize))) {
         printf("could not malloc(%d) for data area\n", poolsize);
-        return 0-1;
+        return -1;
     }
     if (!(stack = malloc(poolsize))) {
         printf("could not malloc(%d) for stack area\n", poolsize);
-        return 0-1;
+        return -1;
     }
     if (!(symbols = malloc(poolsize))) {
         printf("could not malloc(%d) for symbol table\n", poolsize);
-        return 0-1;
+        return -1;
     }
 
     memset(text, 0, poolsize);
@@ -1419,12 +1419,12 @@ int main(int argc, char **argv)
 
     if (!(src = old_src = malloc(poolsize))) {
         printf("could not malloc(%d) for source area\n", poolsize);
-        return 0-1;
+        return -1;
     }
     // read the source file
     if ((i = read(fd, src, poolsize)) <= 0) {
         printf("read() returned %d\n", i);
-        return 0-1;
+        return -1;
     }
     src[i] = 0; // add EOF character
     close(fd);
@@ -1433,7 +1433,7 @@ int main(int argc, char **argv)
 
     if (!(pc = (int *)idmain[Value])) {
         printf("main() not defined\n");
-        return 0-1;
+        return -1;
     }
 
     // dump_text();

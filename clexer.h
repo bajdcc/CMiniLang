@@ -110,7 +110,7 @@ namespace clib {
         bool is_integer() const;
         bool is_basetype() const;
 
-        LEX_T(uint) get_integer() const;
+        LEX_T(int) get_integer() const;
         LEX_T(int) get_sizeof() const;
         lexer_t get_typeof(bool) const;
 

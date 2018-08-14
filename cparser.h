@@ -26,7 +26,7 @@ namespace clib {
 
         void program();
         ast_node *expression(operator_t level);
-        void statement();
+        ast_node *statement();
         void enum_declaration();
         void function_parameter();
         void function_body();

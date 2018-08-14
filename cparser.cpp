@@ -84,11 +84,30 @@ namespace clib {
             error("unexpected token EOF of expression");
         }
         if (lexer.is_integer()) { // 数字
-            auto tmp = lexer.get_integer();
-            match_number();
+            auto type = lexer.get_type();
+            switch (type) {
+#define DEFINE_NODE_INT(t) \
+            case l_##t: \
+                node = ast.new_node(ast_##t); \
+                node->data._##t = lexer.get_##t(); \
+                break;
 
-            node = ast.new_node(ast_int);
-            node->data._int = tmp;
+                DEFINE_NODE_INT(char)
+                DEFINE_NODE_INT(uchar)
+                DEFINE_NODE_INT(short)
+                DEFINE_NODE_INT(ushort)
+                DEFINE_NODE_INT(int)
+                DEFINE_NODE_INT(uint)
+                DEFINE_NODE_INT(long)
+                DEFINE_NODE_INT(ulong)
+                DEFINE_NODE_INT(float)
+                DEFINE_NODE_INT(double)
+#undef DEFINE_NODE_INT
+                default:
+                    error("invalid number");
+                    break;
+            }
+            match_number();
         } else if (lexer.is_type(l_string)) { // 字符串
             std::stringstream ss;
             ss << lexer.get_string();
@@ -143,10 +162,13 @@ namespace clib {
                 match_operator(op_lparan);
 
                 node = ast.new_node(ast_invoke);
+                ast.set_id(node, id);
 
                 // pass in arguments
                 while (!lexer.is_operator(op_rparan)) { // 参数数量
-                    cast::set_child(node, expression(op_assign));
+                    auto tmp = ast.new_node(ast_exp_param);
+                    cast::set_child(tmp, expression(op_assign));
+                    cast::set_child(node, tmp);
 
                     if (lexer.is_operator(op_comma)) {
                         match_operator(op_comma);
@@ -195,19 +217,19 @@ namespace clib {
         } else if (lexer.is_operator(op_logical_not)) {
             // not
             match_operator(op_logical_not);
-            node = ast.new_node(ast_binop);
+            node = ast.new_node(ast_sinop);
             node->data._op.op = op_logical_not;
             cast::set_child(node, expression(op_plus_plus));
         } else if (lexer.is_operator(op_bit_not)) {
             // bitwise not
             match_operator(op_bit_not);
-            node = ast.new_node(ast_binop);
+            node = ast.new_node(ast_sinop);
             node->data._op.op = op_bit_not;
             cast::set_child(node, expression(op_plus_plus));
         } else if (lexer.is_operator(op_plus)) {
             // +var, do nothing
             match_operator(op_plus);
-            node = ast.new_node(ast_binop);
+            node = ast.new_node(ast_sinop);
             node->data._op.op = op_plus;
             cast::set_child(node, expression(op_plus_plus));
         } else if (lexer.is_operator(op_minus)) {
@@ -215,8 +237,28 @@ namespace clib {
             match_operator(op_minus);
 
             if (lexer.is_integer()) {
-                node = ast.new_node(ast_int);
-                node->data._int = -lexer.get_integer();
+                auto type = lexer.get_type();
+                switch (type) {
+#define DEFINE_NODE_INT(t) \
+                case l_##t: \
+                    node = ast.new_node(ast_##t); \
+                    node->data._##t = -lexer.get_##t(); \
+                    break;
+                    DEFINE_NODE_INT(char)
+                    DEFINE_NODE_INT(uchar)
+                    DEFINE_NODE_INT(short)
+                    DEFINE_NODE_INT(ushort)
+                    DEFINE_NODE_INT(int)
+                    DEFINE_NODE_INT(uint)
+                    DEFINE_NODE_INT(long)
+                    DEFINE_NODE_INT(ulong)
+                    DEFINE_NODE_INT(float)
+                    DEFINE_NODE_INT(double)
+#undef DEFINE_NODE_INT
+                    default:
+                        error("invalid integer type");
+                        break;
+                }
                 match_integer();
             } else {
                 node = ast.new_node(ast_sinop);
@@ -226,7 +268,7 @@ namespace clib {
         } else if (lexer.is_operator(op_plus_plus, op_minus_minus)) {
             auto tmp = lexer.get_operator();
             match_type(l_operator);
-            node = ast.new_node(ast_binop);
+            node = ast.new_node(ast_sinop);
             node->data._op.op = tmp;
             cast::set_child(node, expression(op_plus_plus));
         } else {
@@ -267,6 +309,14 @@ namespace clib {
 
                     cast::set_child(node, expression(op_query));
                 }
+                    break;
+                case op_lsquare:
+                    match_operator(op);
+                    node = ast.new_node(ast_binop);
+                    node->data._op.op = op;
+                    cast::set_child(node, tmp);
+                    cast::set_child(node, expression(op_assign));
+                    match_operator(op_rsquare);
                     break;
                 case op_plus_plus:
                 case op_minus_minus:
@@ -321,7 +371,7 @@ namespace clib {
     }
 
     // 基本语句
-    void cparser::statement() {
+    ast_node *cparser::statement() {
         // there are 8 kinds of statements here:
         // 1. if (...) <statement> [else <statement>]
         // 2. while (...) <statement>
@@ -330,94 +380,66 @@ namespace clib {
         // 5. <empty statement>;
         // 6. expression; (expression end with semicolon)
 
+        ast_node *node = nullptr;
         if (lexer.is_keyword(k_if)) { // if判断
-            // if (...) <statement> [else <statement>]
-            //
-            //   if (...)           <cond>
-            //                      JZ a
-            //     <statement>      <statement>
-            //   else:              JMP b
-            // a:
-            //     <statement>      <statement>
-            // b:                   b:
-            //
-            //
             match_keyword(k_if);
 
-            ast.new_child(ast_if);
+            node = ast.new_node(ast_if);
             match_operator(op_lparan);
 
-            ast.add_child(expression(op_assign)); // if判断的条件
-
+            cast::set_child(node, expression(op_assign)); // if判断的条件
             match_operator(op_rparan);
 
-            ast.new_child(ast_stmt);
-            statement();  // 处理if执行体
-            ast.to(to_parent);
-
+            cast::set_child(node, statement());  // 处理if执行体
             if (lexer.is_keyword(k_else)) { // 处理else
                 match_keyword(k_else);
-
-                ast.new_child(ast_stmt);
-                statement();
-                ast.to(to_parent);
+                cast::set_child(node, statement());
             }
-            ast.to(to_parent);
         } else if (lexer.is_keyword(k_while)) { // while循环
-            //
-            // a:                     a:
-            //    while (<cond>)        <cond>
-            //                          JZ b
-            //     <statement>          <statement>
-            //                          JMP a
-            // b:                     b:
             match_keyword(k_while);
 
-            ast.new_child(ast_while);
+            node = ast.new_node(ast_while);
             match_operator(op_lparan);
 
-            ast.add_child(expression(op_assign)); // 条件
-
+            cast::set_child(node, expression(op_assign)); // 条件
             match_operator(op_rparan);
 
-            ast.new_child(ast_stmt);
-            statement();
-            ast.to(to_parent);
-
+            cast::set_child(node, statement());
         } else if (lexer.is_operator(op_lbrace)) { // 语句
-            // { <statement> ... }
             match_operator(op_lbrace);
 
-            ast.new_child(ast_block);
+            node = ast.new_node(ast_block);
             while (!lexer.is_operator(op_rbrace)) {
-                ast.new_child(ast_stmt);
-                statement();
-                ast.to(to_parent);
+                cast::set_child(node, statement());
             }
-            ast.to(to_parent);
 
             match_operator(op_rbrace);
         } else if (lexer.is_keyword(k_return)) { // 返回
             // return [expression];
             match_keyword(k_return);
 
-            ast.new_child(ast_block);
+            node = ast.new_node(ast_return);
             if (!lexer.is_operator(op_semi)) {
-                ast.add_child(expression(op_assign));
+                cast::set_child(node, expression(op_assign));
             }
-            ast.to(to_parent);
 
             match_operator(op_semi);
         } else if (lexer.is_operator(op_semi)) { // 空语句
             // empty statement
             match_operator(op_semi);
+            node = ast.new_node(ast_empty);
         } else { // 表达式
             // a = b; or function_call();
-            ast.new_child(ast_exp);
-            ast.add_child(expression(op_assign));
-            ast.to(to_parent);
+            node = ast.new_node(ast_exp);
+            cast::set_child(node, expression(op_assign));
             match_operator(op_semi);
         }
+        if (node && node->flag != ast_block && node->flag != ast_stmt) {
+            auto tmp = ast.new_node(ast_stmt);
+            cast::set_child(tmp, node);
+            node = tmp;
+        }
+        return node;
     }
 
     // 枚举声明
@@ -456,7 +478,6 @@ namespace clib {
 
     // 函数参数
     void cparser::function_parameter() {
-        auto params = 0;
         while (!lexer.is_operator(op_rparan)) { // 判断参数右括号结尾
             // int name, ...
             auto type = parse_type(); // 基本类型
@@ -539,12 +560,13 @@ namespace clib {
                 match_operator(op_semi);
             }
 
-            ast.new_child(ast_stmt);
             // statements
             while (!lexer.is_operator(op_rbrace)) {
-                statement();
+                auto stmt = statement();
+                if (stmt != nullptr) {
+                    ast.add_child(stmt);
+                }
             }
-            ast.to(to_parent);
         }
     }
 
@@ -655,17 +677,17 @@ namespace clib {
     }
 
     void cparser::match_keyword(keyword_t type) {
-        expect(lexer.is_keyword(type), "expect keyword");
+        expect(lexer.is_keyword(type), string_t("expect keyword ") + KEYWORD_STRING(type));
         next();
     }
 
     void cparser::match_operator(operator_t type) {
-        expect(lexer.is_operator(type), "expect operator");
+        expect(lexer.is_operator(type), string_t("expect operator " + OPERATOR_STRING(type)));
         next();
     }
 
     void cparser::match_type(lexer_t type) {
-        expect(lexer.is_type(type), "expect type");
+        expect(lexer.is_type(type), string_t("expect type " + LEX_STRING(type)));
         next();
     }
 
