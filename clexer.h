@@ -114,6 +114,8 @@ namespace clib {
         LEX_T(int) get_sizeof() const;
         lexer_t get_typeof(bool) const;
 
+        void reset();
+
     private:
         string_t str;
         uint index{0};

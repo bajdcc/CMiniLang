@@ -229,9 +229,6 @@ struct base_lexer_t<obj> \
     int lexer_operatorpred(operator_t);
 
     extern string_t keyword_string_list[];
-    string_t lexer_operator_regex(int);
-
-    int lexer_operator_start_idx(int);
 
 #define LEX_T(t) base_t<l_##t>::type
 #define LEX_CONV_T(t) base_lexer_t<t>::type
@@ -256,7 +253,7 @@ struct base_lexer_t<obj> \
     };
 
     enum class_t {
-        CLASS_NULL, Num, Fun, Sys, Glo, Loc, Id
+        CLASS_NULL, Num, Fun, Sys, Glo, Loc
     };
 
     union storage_t {

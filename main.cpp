@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <fstream>
+#include <iostream>
 #include "cparser.h"
 
 extern int g_argc;
@@ -55,9 +56,23 @@ int main()
     hanoi(3, 'A', 'B', 'C');
     return 0;
 })";
-#if 0
+    string_t txt2 = R"(
+enum {
+    a = 2,
+    b,
+    c
+};
+int a, *b, **c;
+int a(char b, char c) {
+    char a, *b;
+    a = ("abcd"++ + &***b) / 2;
+}
+)";
+#if 1
     try {
-        clib::cparser p(txt);
+        clib::cparser p(txt2);
+        auto root = p.parse();
+        p.ast_print(root, std::cout);
     } catch (const std::exception& e) {
         printf("ERROR: %s\n", e.what());
     }

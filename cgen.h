@@ -48,7 +48,7 @@ namespace clib {
         std::vector<LEX_T(int)> text;
         std::vector<LEX_T(int)> stack;
         std::vector<LEX_T(char)> data;
-        std::map<LEX_T(string), std::shared_ptr<sym_t>> symbols;
+        std::unordered_map<LEX_T(string), std::shared_ptr<sym_t>> symbols;
     };
 }
 

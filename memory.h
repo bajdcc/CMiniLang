@@ -329,6 +329,10 @@ namespace clib {
         size_t available() const {
             return block_available_size;
         }
+
+        void clear() {
+            _init();
+        }
     };
 
     // 基于原始内存池的内存分配策略

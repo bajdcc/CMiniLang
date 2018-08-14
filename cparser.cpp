@@ -1,6 +1,11 @@
-#include <cassert>
+//
+// Project: CMiniLang
+// Author: bajdcc
+//
+#include <sstream>
 #include "cparser.h"
 #include "clexer.h"
+#include "cast.h"
 
 namespace clib {
 
@@ -13,14 +18,26 @@ namespace clib {
 
     cparser::cparser(string_t str)
         : lexer(str) {
-        init();
     }
 
     cparser::~cparser() = default;
 
-    void cparser::init() {
+    ast_node *cparser::parse() {
+        // 清空词法分析结果
+        lexer.reset();
+        // 清空AST
+        ast.reset();
+        // 语法分析（递归下降）
         program();
-        gen.eval();
+        return ast.get_root();
+    }
+
+    ast_node *cparser::root() const {
+        return ast.get_root();
+    }
+
+    void cparser::ast_print(ast_node *node, std::ostream &os) {
+        ast.print(node, 0, os);
     }
 
     void cparser::next() {
@@ -55,290 +72,192 @@ namespace clib {
     }
 
     // 表达式
-    void cparser::expression(operator_t level) {
+    ast_node *cparser::expression(operator_t level) {
         // 表达式有多种类型，像 `(char) *a[10] = (int *) func(b > 0 ? 10 : 20);
         //
         // 1. unit_unary ::= unit | unit unary_op | unary_op unit
         // 2. expr ::= unit_unary (bin_op unit_unary ...)
 
-        { // unit_unary()
-            if (lexer.is_type(l_end)) { // 结尾
-                error("unexpected token EOF of expression");
-                assert(0);
-            }
-            if (lexer.is_integer()) { // 数字
-                auto tmp = lexer.get_integer();
-                match_number();
+        ast_node *node = nullptr;
+        // unit_unary()
+        if (lexer.is_type(l_end)) { // 结尾
+            error("unexpected token EOF of expression");
+        }
+        if (lexer.is_integer()) { // 数字
+            auto tmp = lexer.get_integer();
+            match_number();
 
-                // emit code
-                gen.emit(IMM);
-                gen.emit(tmp);
-                expr_type = l_int;
-            } else if (lexer.is_type(l_string)) { // 字符串
-                auto s = lexer.get_string();
+            node = ast.new_node(ast_int);
+            node->data._int = tmp;
+        } else if (lexer.is_type(l_string)) { // 字符串
+            std::stringstream ss;
+            ss << lexer.get_string();
+#if 0
+            printf("[%04d:%03d] String> %04X '%s'\n", clexer.get_line(), clexer.get_column(), idx, clexer.get_string().c_str());
+#endif
+            match_type(l_string);
+
+            while (lexer.is_type(l_string)) {
+                ss << lexer.get_string();
 #if 0
                 printf("[%04d:%03d] String> %04X '%s'\n", clexer.get_line(), clexer.get_column(), idx, clexer.get_string().c_str());
 #endif
                 match_type(l_string);
+            }
 
-                while (lexer.is_type(l_string)) {
-                    s += lexer.get_string();
-#if 0
-                    printf("[%04d:%03d] String> %04X '%s'\n", clexer.get_line(), clexer.get_column(), idx, clexer.get_string().c_str());
-#endif
-                    match_type(l_string);
+            node = ast.new_node(ast_string);
+            ast.set_str(node, ss.str());
+        } else if (lexer.is_keyword(k_sizeof)) { // sizeof
+            // 支持 `sizeof(int)`, `sizeof(char)` and `sizeof(*...)`
+            match_keyword(k_sizeof);
+            match_operator(op_lparan);
+
+            if (lexer.is_keyword(k_unsigned)) {
+                match_keyword(k_unsigned); // 有符号或无符号大小相同
+            }
+
+            auto size = lexer.get_sizeof();
+            next();
+
+            while (lexer.is_operator(op_times)) {
+                match_operator(op_times);
+                if (size != LEX_SIZEOF(ptr)) {
+                    size = LEX_SIZEOF(ptr);
                 }
+            }
 
-                auto idx = gen.save_string(s);
+            match_operator(op_rparan);
 
-                // emit code
-                gen.emit(IMM);
-                gen.emit(idx);
-                gen.emit(LOAD);
+            node = ast.new_node(ast_int);
+            node->data._int = size;
+        } else if (lexer.is_type(l_identifier)) { // 变量
+            // 三种可能
+            // 1. function call 函数名调用
+            // 2. Enum variable 枚举值
+            // 3. global/local variable 全局/局部变量名
+            auto id = lexer.get_identifier();
+            match_type(l_identifier);
 
-                expr_type = l_char;
-                ptr_level = 1;
-            } else if (lexer.is_keyword(k_sizeof)) { // sizeof
-                // 支持 `sizeof(int)`, `sizeof(char)` and `sizeof(*...)`
-                match_keyword(k_sizeof);
+            if (lexer.is_operator(op_lparan)) { // 函数调用
+                // function call
                 match_operator(op_lparan);
-                expr_type = l_int;
-                ptr_level = 0;
 
-                if (lexer.is_keyword(k_unsigned)) {
-                    match_keyword(k_unsigned); // 有符号或无符号大小相同
-                }
+                node = ast.new_node(ast_invoke);
 
-                auto size = lexer.get_sizeof();
-                next();
+                // pass in arguments
+                while (!lexer.is_operator(op_rparan)) { // 参数数量
+                    cast::set_child(node, expression(op_assign));
 
-                while (lexer.is_operator(op_times)) {
-                    match_operator(op_times);
-                    if (expr_type != l_ptr) {
-                        size = LEX_SIZEOF(ptr); // 指针大小
-                        expr_type = l_ptr;
+                    if (lexer.is_operator(op_comma)) {
+                        match_operator(op_comma);
                     }
                 }
 
                 match_operator(op_rparan);
-
-                // emit code
-                gen.emit(IMM);
-                gen.emit(size);
-
-                expr_type = l_int;
-                ptr_level = 0;
-            } else if (lexer.is_type(l_identifier)) { // 变量
-                // 三种可能
-                // 1. function call 函数名调用
-                // 2. Enum variable 枚举值
-                // 3. global/local variable 全局/局部变量名
-                match_type(l_identifier);
-
-                auto func_id = id; // 保存当前的变量名(因为如果是函数调用，id会被覆盖)
-
-                if (lexer.is_operator(op_lparan)) { // 函数调用
-                    // function call
-                    match_operator(op_lparan);
-
-                    // pass in arguments
-                    auto tmp = 0; // number of arguments
-                    while (!lexer.is_operator(op_rparan)) { // 参数数量
-                        ptr_level = 0;
-                        expression(op_assign);
-                        gen.emit(PUSH);
-                        tmp++;
-
-                        if (lexer.is_operator(op_comma)) {
-                            match_operator(op_comma);
-                        }
-                    }
-                    match_operator(op_rparan);
-
-                    id = func_id;
-
-                    // emit code
-                    if (id->cls == Sys) { // 内建函数
-                        // system functions
-                        gen.emit(*id);
-                    } else if (id->cls == Fun) { // 普通函数
-                        // function call
-                        gen.emit(CALL);
-                        gen.emit(*id);
-                    } else {
-                        error("bad function call");
-                    }
-
-                    // 清除栈上参数
-                    if (tmp > 0) {
-                        gen.emit(ADJ);
-                        gen.emit(tmp);
-                    }
-                    expr_type = id->type;
-                    ptr_level = id->ptr;
-                } else if (id->cls == Num) {
-                    // enum variable
-                    gen.emit(IMM);
-                    gen.emit(*id);
-                    expr_type = l_int;
-                    ptr_level = 0;
-                } else {
-                    // variable
-                    if (id->cls == Loc) { // 本地变量
-                        gen.emit(LEA);
-                        gen.emit(*id, ebp);
-                    } else if (id->cls == Glo) { // 全局变量
-                        gen.emit(IMM);
-                        gen.emit(*id);
-                        gen.emit(LOAD);
-                    } else {
-                        error("undefined variable");
-                    }
-                    // emit code
-                    // 读取值到ax寄存器中
-                    expr_type = id->type;
-                    ptr_level = id->ptr;
-                    gen.emitl(id->ptr > 0 ? l_int : expr_type);
-                }
-            } else if (lexer.is_operator(op_lparan)) { // 强制转换
-                // cast or parenthesis
-                match_operator(op_lparan);
-                if (lexer.is_type(l_keyword)) {
-                    auto tmp = parse_type();
-                    auto ptr = 0;
-
-                    while (lexer.is_operator(op_times)) {
-                        match_operator(op_times);
-                        ptr++;
-                    }
-                    match_operator(op_rparan);
-
-                    expression(op_plus_plus);
-                    expr_type = tmp;
-                    ptr_level = ptr;
-                } else {
-                    // 普通括号嵌套
-                    expression(op_assign);
-                    match_operator(op_rparan);
-                }
-            } else if (lexer.is_operator(op_times)) { // 解引用
-                // dereference *<addr>
-                match_operator(op_times);
-                expression(op_plus_plus);
-                ptr_level--;
-
-                gen.emitl((id->ptr > 0) ? ((id->ptr == 1 && expr_type == l_char) ? l_char : l_int) : expr_type);
-            } else if (lexer.is_operator(op_bit_and)) { // 取地址
-                // get the address of
-                match_operator(op_bit_and);
-                expression(op_plus_plus);
-                if (gen.top() == LI || gen.top() == LC) {
-                    gen.pop();
-                } else {
-                    error("bad address of");
-                }
-
-                ptr_level++;
-            } else if (lexer.is_operator(op_logical_not)) {
-                // not
-                match_operator(op_logical_not);
-                expression(op_plus_plus);
-
-                // emit code, use <expr> == 0
-                gen.emit(PUSH);
-                gen.emit(IMM);
-                gen.emit(0);
-                gen.emit(EQ);
-
-                expr_type = l_int;
-                ptr_level = 0;
-            } else if (lexer.is_operator(op_bit_not)) {
-                // bitwise not
-                match_operator(op_bit_not);
-                expression(op_plus_plus);
-
-                // emit code, use <expr> XOR -1
-                gen.emit(PUSH);
-                gen.emit(IMM);
-                gen.emit(-1);
-                gen.emit(XOR);
-
-                expr_type = l_int;
-                ptr_level = 0;
-            } else if (lexer.is_operator(op_plus)) {
-                // +var, do nothing
-                match_operator(op_plus);
-                expression(op_plus_plus);
-
-                expr_type = l_int;
-                ptr_level = 0;
-            } else if (lexer.is_operator(op_minus)) {
-                // -var
-                match_operator(op_minus);
-
-                if (lexer.is_integer()) {
-                    gen.emit(IMM);
-                    gen.emit(lexer.get_integer());
-                    match_integer();
-                } else {
-                    gen.emit(IMM);
-                    gen.emit(-1);
-                    gen.emit(PUSH);
-                    expression(op_plus_plus);
-                    gen.emit(MUL);
-                }
-
-                expr_type = l_int;
-                ptr_level = 0;
-            } else if (lexer.is_operator(op_plus_plus, op_minus_minus)) {
-                auto tmp = lexer.get_operator();
-                match_type(l_operator);
-                expression(op_plus_plus);
-                if (gen.top() == LI) {
-                    gen.top(PUSH);
-                    gen.emit(LI);
-                } else if (gen.top() == LC) {
-                    gen.top(PUSH);
-                    gen.emit(LC);
-                } else {
-                    error("bad lvalue of pre-increment");
-                }
-                gen.emit(PUSH);
-                gen.emit(IMM);
-                gen.emit((ptr_level == 0 || (ptr_level == 1 && expr_type == l_char)) ? 1 : LEX_SIZEOF(ptr));
-                gen.emit(tmp == op_plus_plus ? ADD : SUB);
-                gen.emits(ptr_level > 0 ? l_int : expr_type);
             } else {
-                error("bad expression");
+                node = ast.new_node(ast_id);
+                ast.set_id(node, id);
             }
+        } else if (lexer.is_operator(op_lparan)) { // 强制转换
+            // cast or parenthesis
+            match_operator(op_lparan);
+            if (lexer.is_type(l_keyword)) {
+                auto tmp = parse_type();
+                auto ptr = 0;
+
+                while (lexer.is_operator(op_times)) {
+                    match_operator(op_times);
+                    ptr++;
+                }
+                match_operator(op_rparan);
+
+                node = ast.new_node(ast_cast);
+                node->data._type.type = tmp;
+                node->data._type.ptr = ptr;
+                cast::set_child(node, expression(op_plus_plus));
+            } else {
+                // 普通括号嵌套
+                node = expression(op_assign);
+                match_operator(op_rparan);
+            }
+        } else if (lexer.is_operator(op_times)) { // 解引用
+            // dereference *<addr>
+            match_operator(op_times);
+            node = ast.new_node(ast_sinop);
+            node->data._op.op = op_times;
+            cast::set_child(node, expression(op_plus_plus));
+        } else if (lexer.is_operator(op_bit_and)) { // 取地址
+            // get the address of
+            match_operator(op_bit_and);
+            node = ast.new_node(ast_sinop);
+            node->data._op.op = op_bit_and;
+            cast::set_child(node, expression(op_plus_plus));
+        } else if (lexer.is_operator(op_logical_not)) {
+            // not
+            match_operator(op_logical_not);
+            node = ast.new_node(ast_binop);
+            node->data._op.op = op_logical_not;
+            cast::set_child(node, expression(op_plus_plus));
+        } else if (lexer.is_operator(op_bit_not)) {
+            // bitwise not
+            match_operator(op_bit_not);
+            node = ast.new_node(ast_binop);
+            node->data._op.op = op_bit_not;
+            cast::set_child(node, expression(op_plus_plus));
+        } else if (lexer.is_operator(op_plus)) {
+            // +var, do nothing
+            match_operator(op_plus);
+            node = ast.new_node(ast_binop);
+            node->data._op.op = op_plus;
+            cast::set_child(node, expression(op_plus_plus));
+        } else if (lexer.is_operator(op_minus)) {
+            // -var
+            match_operator(op_minus);
+
+            if (lexer.is_integer()) {
+                node = ast.new_node(ast_int);
+                node->data._int = -lexer.get_integer();
+                match_integer();
+            } else {
+                node = ast.new_node(ast_sinop);
+                node->data._op.op = op_minus;
+                cast::set_child(node, expression(op_plus_plus));
+            }
+        } else if (lexer.is_operator(op_plus_plus, op_minus_minus)) {
+            auto tmp = lexer.get_operator();
+            match_type(l_operator);
+            node = ast.new_node(ast_binop);
+            node->data._op.op = tmp;
+            cast::set_child(node, expression(op_plus_plus));
+        } else {
+            error("bad expression");
         }
 
-        { // 二元表达式以及后缀操作符
-            while (lexer.is_type(l_operator) && OPERATOR_PRED(lexer.get_operator()) <= OPERATOR_PRED(level)) { // 优先级判断
-                auto tmp = expr_type;
-                auto ptr = ptr_level;
-                if (lexer.is_operator(op_rparan) || lexer.is_operator(op_rsquare) || lexer.is_operator(op_colon)) {
-                    break;
-                }
-                if (lexer.is_operator(op_assign)) {
+        // 二元表达式以及后缀操作符
+        operator_t op = op__start;
+        while (lexer.is_type(l_operator) && OPERATOR_PRED(op = lexer.get_operator()) <= OPERATOR_PRED(level)) { // 优先级判断
+            auto tmp = node;
+            switch (op) {
+                case op_rparan:
+                case op_rsquare:
+                case op_colon:
+                    return node;
+                case op_assign: {
                     // var = expr;
                     match_operator(op_assign);
-                    auto t = gen.top();
-                    if (t == LI || t == LC) {
-                        gen.top(PUSH); // save the lvalue's pointer
-                    } else {
-                        error("bad lvalue in assignment");
-                    }
-                    expr_type = tmp;
-                    expression(op_assign);
-                    gen.emits(t == LI ? l_int : l_char);
-                } else if (lexer.is_operator(op_query)) {
+                    node = ast.new_node(ast_binop);
+                    node->data._op.op = op_assign;
+                    cast::set_child(node, tmp);
+                    cast::set_child(node, expression(op_assign));
+                }
+                    break;
+                case op_query: {
                     // expr ? a : b;
                     match_operator(op_query);
-                    gen.emit(JZ);
-                    auto addr = gen.index();
-                    gen.emit(-1);
-                    expression(op_assign);
+                    node = ast.new_node(ast_triop);
+                    node->data._op.op = op_query;
+                    cast::set_child(node, tmp);
+                    cast::set_child(node, expression(op_assign));
 
                     if (lexer.is_operator(op_colon)) {
                         match_operator(op_colon);
@@ -346,141 +265,59 @@ namespace clib {
                         error("missing colon in conditional");
                     }
 
-                    gen.emit(gen.index() + 2, addr);
-                    gen.emit(JMP);
-                    addr = gen.index();
-                    gen.emit(-1);
-                    expression(op_query);
-                    gen.emit(gen.index(), addr);
+                    cast::set_child(node, expression(op_query));
                 }
-#define MATCH_BINOP(op, inc, pred) \
-    else if (lexer.is_operator(op)) { \
-        match_operator(op); \
-        gen.emit(PUSH); \
-        expression(pred); \
-        gen.emit(inc); \
-        expr_type = l_int; \
-        ptr_level = 0; \
-    }
-
-                MATCH_BINOP(op_bit_or, OR, op_bit_xor)
-                MATCH_BINOP(op_bit_xor, XOR, op_bit_and)
-                MATCH_BINOP(op_bit_and, AND, op_equal)
-                MATCH_BINOP(op_equal, EQ, op_not_equal)
-                MATCH_BINOP(op_not_equal, NE, op_less_than)
-                MATCH_BINOP(op_less_than, LT, op_left_shift)
-                MATCH_BINOP(op_less_than_or_equal, LE, op_left_shift)
-                MATCH_BINOP(op_greater_than, GT, op_left_shift)
-                MATCH_BINOP(op_greater_than_or_equal, GE, op_left_shift)
-                MATCH_BINOP(op_left_shift, SHL, op_plus)
-                MATCH_BINOP(op_right_shift, SHR, op_plus)
-                MATCH_BINOP(op_times, MUL, op_plus_plus)
-                MATCH_BINOP(op_divide, DIV, op_plus_plus)
-                MATCH_BINOP(op_mod, MOD, op_plus_plus)
-#undef MATCH_BINOP
-                else if (lexer.is_operator(op_plus)) {
-                    // add
-                    match_operator(op_plus);
-                    gen.emit(PUSH);
-                    expression(op_times);
-                    expr_type = l_int;
-                    ptr_level = ptr;
-                    expr_type = tmp;
-                    if (ptr > 0 && (ptr != 1 || expr_type != l_char)) {
-                        gen.emit(PUSH);
-                        gen.emit(IMM);
-                        gen.emit(LEX_SIZEOF(ptr));
-                        gen.emit(MUL);
-                    }
-                    gen.emit(ADD);
-                } else if (lexer.is_operator(op_minus)) {
-                    // sub
-                    match_operator(op_minus);
-                    gen.emit(PUSH);
-                    expression(op_times);
-                    ptr_level = ptr;
-                    expr_type = tmp;
-                    if (ptr > 0 && (ptr != 1 || expr_type != l_char)) {
-                        gen.emit(PUSH);
-                        gen.emit(IMM);
-                        gen.emit(LEX_SIZEOF(ptr));
-                        gen.emit(MUL);
-                    }
-                    gen.emit(SUB);
-                } else if (lexer.is_operator(op_logical_or)) {
-                    // logic or
-                    match_operator(op_logical_or);
-                    gen.emit(JNZ);
-                    auto addr = gen.index();
-                    gen.emit(-1);
-                    expression(op_logical_and);
-                    gen.emit(gen.index(), addr);
-                    expr_type = l_int;
-                    ptr_level = 0;
-                } else if (lexer.is_operator(op_logical_and)) {
-                    // logic and
-                    match_operator(op_logical_and);
-                    gen.emit(JZ);
-                    auto addr = gen.index();
-                    gen.emit(-1);
-                    expression(op_bit_or);
-                    gen.emit(gen.index(), addr);
-                    expr_type = l_int;
-                    ptr_level = 0;
-                } else if (lexer.is_operator(op_plus_plus, op_minus_minus)) {
-                    auto tmp2 = lexer.get_operator();
-                    match_type(l_operator);
-                    // postfix inc(++) and dec(--)
-                    // we will increase the value to the variable and decrease it
-                    // on `ax` to get its original value.
-                    // 构建副本
-                    if (gen.top() == LI) {
-                        gen.top(PUSH);
-                        gen.emit(LI);
-                    } else if (gen.top() == LC) {
-                        gen.top(PUSH);
-                        gen.emit(LC);
-                    } else {
-                        error("bad value in increment");
-                    }
-
-                    gen.emit(PUSH);
-                    gen.emit(IMM);
-                    gen.emit((ptr == 0 || (ptr == 1 && expr_type == l_char)) ? 1 : LEX_SIZEOF(ptr));
-                    gen.emit(tmp2 == op_plus_plus ? ADD : SUB);
-                    gen.emits(ptr > 0 ? l_int : expr_type);
-
-                    gen.emit(PUSH);
-                    gen.emit(IMM);
-                    gen.emit((ptr == 0 || (ptr == 1 && expr_type == l_char)) ? 1 : LEX_SIZEOF(ptr));
-                    gen.emit(tmp2 == op_plus_plus ? SUB : ADD);
-                } else if (lexer.is_operator(op_lsquare)) {
-                    // array access var[xx]
-                    match_operator(op_lsquare);
-                    gen.emit(PUSH);
-                    expression(op_assign);
-                    match_operator(op_rsquare);
-
-                    if (ptr > 0) {
-                        // pointer, `not char *`
-                        if (ptr > 1 || (ptr == 1 && tmp != l_char)) {
-                            gen.emit(PUSH);
-                            gen.emit(IMM);
-                            gen.emit(LEX_SIZEOF(int));
-                            gen.emit(MUL);
-                        }
-                        gen.emit(ADD);
-                        gen.emit(LI);
-                        expr_type = tmp;
-                        ptr_level = ptr - 1;
-                    } else {
-                        error("pointer type expected");
-                    }
-                } else {
+                    break;
+                case op_plus_plus:
+                case op_minus_minus:
+                    match_operator(op);
+                    node = ast.new_node(ast_sinop);
+                    node->data._op.op = op;
+                    node->data._op.data = 1;
+                    cast::set_child(node, tmp);
+                    break;
+                case op_equal:
+                case op_plus:
+                case op_plus_assign:
+                case op_minus:
+                case op_minus_assign:
+                case op_times:
+                case op_times_assign:
+                case op_divide:
+                case op_div_assign:
+                case op_bit_and:
+                case op_and_assign:
+                case op_bit_or:
+                case op_or_assign:
+                case op_bit_xor:
+                case op_xor_assign:
+                case op_mod:
+                case op_mod_assign:
+                case op_less_than:
+                case op_less_than_or_equal:
+                case op_greater_than:
+                case op_greater_than_or_equal:
+                case op_not_equal:
+                case op_logical_and:
+                case op_logical_or:
+                case op_pointer:
+                case op_left_shift:
+                case op_right_shift:
+                case op_left_shift_assign:
+                case op_right_shift_assign:
+                    match_operator(op);
+                    node = ast.new_node(ast_binop);
+                    node->data._op.op = op;
+                    cast::set_child(node, tmp);
+                    cast::set_child(node, expression(op));
+                    break;
+                default:
                     error("compiler error, token = " + lexer.current());
-                }
+                    break;
             }
         }
+
+        return node;
     }
 
     // 基本语句
@@ -506,29 +343,26 @@ namespace clib {
             //
             //
             match_keyword(k_if);
+
+            ast.new_child(ast_if);
             match_operator(op_lparan);
-            expression(op_assign);  // if判断的条件
+
+            ast.add_child(expression(op_assign)); // if判断的条件
+
             match_operator(op_rparan);
 
-            // emit code for if
-            gen.emit(JZ);
-            auto b = gen.index(); // 分支判断，这里要回写到b(即if结尾)
-            gen.emit(-1);
-
+            ast.new_child(ast_stmt);
             statement();  // 处理if执行体
+            ast.to(to_parent);
+
             if (lexer.is_keyword(k_else)) { // 处理else
                 match_keyword(k_else);
 
-                // emit code for JMP B
-                gen.emit(gen.index() + 2, b);
-                gen.emit(JMP);
-                b = gen.index();
-                gen.emit(-1);
-
+                ast.new_child(ast_stmt);
                 statement();
+                ast.to(to_parent);
             }
-
-            gen.emit(gen.index(), b);
+            ast.to(to_parent);
         } else if (lexer.is_keyword(k_while)) { // while循环
             //
             // a:                     a:
@@ -539,51 +373,51 @@ namespace clib {
             // b:                     b:
             match_keyword(k_while);
 
-            auto a = gen.index();
-
+            ast.new_child(ast_while);
             match_operator(op_lparan);
-            expression(op_assign); // 条件
+
+            ast.add_child(expression(op_assign)); // 条件
+
             match_operator(op_rparan);
 
-            gen.emit(JZ);
-            auto b = gen.index(); // 退出的地方
-            gen.emit(-1);
-
+            ast.new_child(ast_stmt);
             statement();
+            ast.to(to_parent);
 
-            gen.emit(JMP);
-            gen.emit(a); // 重复循环
-            gen.emit(gen.index(), b);
         } else if (lexer.is_operator(op_lbrace)) { // 语句
             // { <statement> ... }
             match_operator(op_lbrace);
 
+            ast.new_child(ast_block);
             while (!lexer.is_operator(op_rbrace)) {
+                ast.new_child(ast_stmt);
                 statement();
+                ast.to(to_parent);
             }
+            ast.to(to_parent);
 
             match_operator(op_rbrace);
         } else if (lexer.is_keyword(k_return)) { // 返回
             // return [expression];
             match_keyword(k_return);
 
+            ast.new_child(ast_block);
             if (!lexer.is_operator(op_semi)) {
-                expression(op_assign);
+                ast.add_child(expression(op_assign));
             }
+            ast.to(to_parent);
 
             match_operator(op_semi);
-
-            // emit code for return
-            gen.emit(LEV);
         } else if (lexer.is_operator(op_semi)) { // 空语句
             // empty statement
             match_operator(op_semi);
         } else { // 表达式
             // a = b; or function_call();
-            expression(op_assign);
+            ast.new_child(ast_exp);
+            ast.add_child(expression(op_assign));
+            ast.to(to_parent);
             match_operator(op_semi);
         }
-        ptr_level = 0;
     }
 
     // 枚举声明
@@ -606,9 +440,13 @@ namespace clib {
             }
 
             // 保存值到变量中
-            id->cls = Num;
-            id->type = l_int;
-            id->value._int = i++;
+            ast.new_child(ast_enum_unit);
+            auto _id = ast.new_child(ast_id, false);
+            auto _int = ast.new_child(ast_int, false);
+
+            ast.set_id(_id, lexer.get_identifier());
+            _int->data._int = i++;
+            ast.to(to_parent);
 
             if (lexer.is_operator(op_comma)) {
                 next();
@@ -635,30 +473,23 @@ namespace clib {
                 error("bad parameter declaration");
             }
 
+            auto id = lexer.get_identifier();
             match_type(l_identifier);
-            if (id->cls == Loc) { // 与变量声明冲突
-                error("duplicate parameter declaration");
-            }
+
+            ast.new_child(ast_var_param);
+            auto _type = ast.new_child(ast_type, false);
+            auto _id = ast.new_child(ast_id, false);
+            ast.to(to_parent);
 
             // 保存本地变量
-            // 这里为什么要多设个地方保存之前的值，是因为变量有域(大括号划分)的限制
-            // 进入一个函数体时，全局变量需要保存，退出函数体时恢复
-            id->_cls = id->cls;
-            id->cls = Loc;
-            id->_type = id->type;
-            id->type = type;
-            id->_value._int = id->value._int;
-            id->value._int = params; // 变量在栈上地址
-            id->_ptr = id->ptr;
-            id->ptr = ptr;
-
-            params += 4;
+            _type->data._type.type = type;
+            _type->data._type.ptr = ptr;
+            ast.set_id(_id, id);
 
             if (lexer.is_operator(op_comma)) {
                 match_operator(op_comma);
             }
         }
-        ebp = params + 4;
     }
 
     // 函数体
@@ -670,8 +501,6 @@ namespace clib {
             // 1. local declarations
             // 2. statements
             // }
-
-            auto pos_local = ebp; // 变量在栈上地址
 
             while (lexer.is_basetype()) {
                 // 处理基本类型
@@ -689,24 +518,19 @@ namespace clib {
                         // invalid declaration
                         error("bad local declaration");
                     }
+
+                    auto id = lexer.get_identifier();
                     match_type(l_identifier);
-                    if (id->cls == Loc) { // 变量重复声明
-                        // identifier exists
-                        error("duplicate local declaration");
-                    }
+
+                    ast.new_child(ast_var_local);
+                    auto _type = ast.new_child(ast_type, false);
+                    auto _id = ast.new_child(ast_id, false);
+                    ast.to(to_parent);
 
                     // 保存本地变量
-                    // 这里为什么要多设个地方保存之前的值，是因为变量有域(大括号划分)的限制
-                    // 进入一个函数体时，全局变量需要保存，退出函数体时恢复
-                    pos_local += 4;
-                    id->_cls = id->cls;
-                    id->cls = Loc;
-                    id->_type = id->type;
-                    id->type = type;
-                    id->_value._int = id->value._int;
-                    id->value._int = pos_local;  // 参数在栈上地址
-                    id->_ptr = id->ptr;
-                    id->ptr = ptr;
+                    _type->data._type.type = type;
+                    _type->data._type.ptr = ptr;
+                    ast.set_id(_id, id);
 
                     if (lexer.is_operator(op_comma)) {
                         match_operator(op_comma);
@@ -715,17 +539,12 @@ namespace clib {
                 match_operator(op_semi);
             }
 
-            // save the stack size for local variables
-            gen.emit(ENT);
-            gen.emit(pos_local - ebp);
-
+            ast.new_child(ast_stmt);
             // statements
             while (!lexer.is_operator(op_rbrace)) {
                 statement();
             }
-
-            // emit code for leaving the sub function
-            gen.emit(LEV);
+            ast.to(to_parent);
         }
     }
 
@@ -735,13 +554,15 @@ namespace clib {
         //               | this part
 
         match_operator(op_lparan);
+        ast.new_child(ast_param);
         function_parameter();
+        ast.to(to_parent);
         match_operator(op_rparan);
         match_operator(op_lbrace);
+        ast.new_child(ast_block);
         function_body();
+        ast.to(to_parent);
         // match('}'); 这里不处理右括号是为了上层函数判断结尾
-
-        gen.unwind();
     }
 
     // 变量声明语句(全局或函数体内)
@@ -756,12 +577,14 @@ namespace clib {
             if (!lexer.is_operator(op_lbrace)) {
                 match_type(l_identifier); // 省略了[id]枚举名
             }
+            ast.new_child(ast_enum);
             if (lexer.is_operator(op_lbrace)) {
                 // 处理枚举体
                 match_operator(op_lbrace);
                 enum_declaration(); // 枚举的变量声明部分，即 a = 10, b = 20, ...
                 match_operator(op_rbrace);
             }
+            ast.to(to_parent);
 
             match_operator(op_semi);
             return;
@@ -786,25 +609,33 @@ namespace clib {
                 // invalid declaration
                 error("bad global declaration");
             }
+            auto id = lexer.get_identifier();
             match_type(l_identifier);
-            if (id->cls) { // 变量名已经声明，则报重复声明错误
-                // identifier exists
-                error("duplicate global declaration");
-            }
-            id->type = type;
-            id->ptr = ptr;
 
             if (lexer.is_operator(op_lparan)) { // 有左括号则应判定是函数声明
-                id->cls = Fun;
-                id->value._int = gen.index(); // 记录函数地址
+                ast.new_child(ast_func);
+                auto _type = ast.new_child(ast_type, false);
+                auto _id = ast.new_child(ast_id, false);
+
+                // 处理变量声明
+                _type->data._type.type = type;
+                _type->data._type.ptr = ptr;
+                ast.set_id(_id, id);
 #if 0
                 printf("[%04d:%03d] Function> %04X '%s'\n", clexer.get_line(), clexer.get_column(), id->value._int * 4, id->name.c_str());
 #endif
                 function_declaration();
+                ast.to(to_parent);
             } else {
+                ast.new_child(ast_var_global);
+                auto _type = ast.new_child(ast_type, false);
+                auto _id = ast.new_child(ast_id, false);
+
                 // 处理变量声明
-                id->cls = Glo; // 全局变量
-                id->value._int = gen.get_data(); // 记录变量地址
+                _type->data._type.type = type;
+                _type->data._type.ptr = ptr;
+                ast.set_id(_id, id);
+                ast.to(to_parent);
 #if 0
                 printf("[%04d:%03d] Global> %04X '%s'\n", clexer.get_line(), clexer.get_column(), id->value._int, id->name.c_str());
 #endif
@@ -817,30 +648,34 @@ namespace clib {
         next();
     }
 
+    void cparser::expect(bool flag, const string_t &info) {
+        if (!flag) {
+            error(info);
+        }
+    }
+
     void cparser::match_keyword(keyword_t type) {
-        assert(lexer.is_keyword(type));
+        expect(lexer.is_keyword(type), "expect keyword");
         next();
     }
 
     void cparser::match_operator(operator_t type) {
-        assert(lexer.is_operator(type));
+        expect(lexer.is_operator(type), "expect operator");
         next();
     }
 
     void cparser::match_type(lexer_t type) {
-        assert(lexer.is_type(type));
-        if (type == l_identifier)
-            save_identifier();
+        expect(lexer.is_type(type), "expect type");
         next();
     }
 
     void cparser::match_number() {
-        assert(lexer.is_number());
+        expect(lexer.is_number(), "expect number");
         next();
     }
 
     void cparser::match_integer() {
-        assert(lexer.is_integer());
+        expect(lexer.is_integer(), "expect integer");
         next();
     }
 
@@ -861,14 +696,7 @@ namespace clib {
         return type;
     }
 
-    // 保存刚刚识别的变量名
-    void cparser::save_identifier() {
-        id = gen.add_sym(lexer.get_identifier());
-        if (id->ptr == 0)
-            id->ptr = ptr_level;
-    }
-
-    void cparser::error(string_t info) {
+    void cparser::error(const string_t &info) {
         printf("[%04d:%03d] ERROR: %s\n", lexer.get_line(), lexer.get_column(), info.c_str());
         throw std::exception();
     }

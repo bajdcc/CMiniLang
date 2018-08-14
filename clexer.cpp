@@ -530,7 +530,7 @@ LEX_T(t) clexer::get_store_##t(int index) const \
             return digit_from_integer(_postfix, n) ? _postfix : _type;
         }
         if (str[i] == '.') { // 解析小数部分
-            auto l = ++i;
+            sint l = ++i;
             for (; i < length && (isdigit(str[i])); i++) {
                 d *= 10.0;
                 d += str[i] - '0';
@@ -946,5 +946,18 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                 bitOp[j].set((uint) op[j]); // 操作符第一/二位char二进制查找
             }
         }
+    }
+
+    void clexer::reset() {
+        index = 0;
+        last_index = 0;
+
+        type = l_none;
+        line = 1;
+        column = 1;
+        last_line = 1;
+        last_column = 1;
+
+        records.clear();
     }
 }

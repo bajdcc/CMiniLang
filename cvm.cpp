@@ -334,7 +334,7 @@ namespace clib {
         auto bp = 0;
         auto log = false;
 
-#if 1
+#if 0
         if (log) {
             printf("\n---------------- STACK BEGIN <<<< \n");
             printf("AX: %08X BP: %08X SP: %08X\n", ax, bp, sp);
@@ -352,7 +352,7 @@ namespace clib {
             auto op = vmm_get(pc); // get next operation code
             pc += INC_PTR;
 
-#if 1
+#if 0
             assert(op <= EXIT);
             // print debug info
             if (log) {
