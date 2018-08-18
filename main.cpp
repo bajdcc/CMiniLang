@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include "cparser.h"
+#include "cvm.h"
 
 extern int g_argc;
 extern char** g_argv;
@@ -15,21 +16,7 @@ int main(int argc, char **argv)
 {
     g_argc = argc;
     g_argv = argv;
-
-    string_t txt2 = R"(
-enum {
-    a = 2,
-    b,
-    c
-};
-int a, *b, **c;
-int a(char b, char c) {
-    char a, *b;
-    b = a[5 + 5];
-    a = ("abcd"++ + &***b) / 2;
-    if (1) a = 1;
-    else if (2) { return 0; }
-})";
+#if 1
     string_t txt = R"(
 int fibonacci(int i) {
     if (i <= 1)
@@ -69,11 +56,12 @@ int main()
     hanoi(3, 'A', 'B', 'C');
     return 0;
 })";
-#if 0
     try {
-        clib::cparser p(txt2);
+        clib::cparser p(txt);
         auto root = p.parse();
-        p.ast_print(root, std::cout);
+        clib::cast::print(root, 0, std::cout);
+        clib::cgen gen(root);
+        gen.eval();
     } catch (const std::exception& e) {
         printf("ERROR: %s\n", e.what());
     }
@@ -93,7 +81,9 @@ int main()
     try {
         clib::cparser p(str);
         auto root = p.parse();
-        p.ast_print(root, std::cout);
+        //clib::cast::print(root, 0, std::cout);
+        clib::cgen gen(root);
+        gen.eval();
     } catch (const std::exception& e) {
         printf("ERROR: %s\n", e.what());
     }

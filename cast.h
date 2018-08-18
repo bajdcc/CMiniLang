@@ -84,6 +84,9 @@ namespace clib {
                 operator_t op;
                 sint data;
             } _op;
+            struct {
+                sint _1, _2;
+            } _ins;
         } data; // 数据
 
         // 树型数据结构，广义表
@@ -98,7 +101,7 @@ namespace clib {
         cast();
         ~cast() = default;
 
-        ast_node *get_root() const;
+        ast_node *get_root();
 
         ast_node *new_node(ast_t type);
         ast_node *new_child(ast_t type, bool step = true);
@@ -107,13 +110,15 @@ namespace clib {
         ast_node *add_child(ast_node*);
         static ast_node *set_child(ast_node*, ast_node*);
         static ast_node *set_sibling(ast_node*, ast_node*);
+        static int children_size(ast_node*);
 
         void set_id(ast_node *node, const string_t &str);
         void set_str(ast_node *node, const string_t &str);
+        static std::string display_str(ast_node *node);
 
         void to(ast_to_t type);
 
-        void print(ast_node *node, int level, std::ostream &os) const;
+        static void print(ast_node *node, int level, std::ostream &os);
 
         void reset();
     private:

@@ -15,11 +15,10 @@ namespace clib {
     class cparser {
     public:
         explicit cparser(string_t str);
-        ~cparser();
+        ~cparser() = default;
 
         ast_node *parse();
-        ast_node *root() const;
-        void ast_print(ast_node *node, std::ostream &os);
+        ast_node *root();
 
     private:
         void next();

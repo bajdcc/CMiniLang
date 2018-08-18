@@ -7,6 +7,7 @@
 #include <memory.h>
 #include <cstring>
 #include "cvm.h"
+#include "cgen.h"
 
 int g_argc;
 char **g_argv;
@@ -122,7 +123,7 @@ namespace clib {
 #if 1
         printf("VMMGET> Invalid VA: %08X\n", va);
 #endif
-        assert(0);
+        throw std::exception();
         return vmm_get<T>(va);
     }
 
@@ -137,7 +138,7 @@ namespace clib {
 #if 0
         printf("VMMSET> Invalid VA: %08X\n", va);
 #endif
-        assert(0);
+        throw std::exception();
         return vmm_set(va, value);
     }
 
@@ -228,11 +229,9 @@ namespace clib {
         return t;
     }
 
+    //-----------------------------------------
 
-//-----------------------------------------
-
-
-    cvm::cvm(std::vector<LEX_T(int)> text, std::vector<LEX_T(char)> data) {
+    cvm::cvm(const std::vector<LEX_T(int)> &text, const std::vector<LEX_T(char)> &data) {
         vmm_init();
         uint32_t pa;
         /* 映射4KB的代码空间 */
@@ -243,7 +242,7 @@ namespace clib {
                 if (vmm_ismap(USER_BASE + PAGE_SIZE * i, &pa)) {
                     auto s = start + size > text.size() ? (text.size() & (size - 1)) : size;
                     for (uint32_t j = 0; j < s; ++j) {
-                        *((uint32_t *) pa + j) = text[start + j];
+                        *((uint32_t *) pa + j) = (uint) text[start + j];
 #if 0
                         printf("[%p]> [%08X] %08X\n", (int*)pa + j, USER_BASE + PAGE_SIZE * i + j * 4, vmm_get<uint32_t>(USER_BASE + PAGE_SIZE * i + j * 4));
 #endif
@@ -257,7 +256,7 @@ namespace clib {
             for (uint32_t i = 0, start = 0; start < data.size(); ++i, start += size) {
                 vmm_map(DATA_BASE + PAGE_SIZE * i, (uint32_t) pmm_alloc(), PTE_U | PTE_P | PTE_R); // 用户数据空间
                 if (vmm_ismap(DATA_BASE + PAGE_SIZE * i, &pa)) {
-                    auto s = start + size > data.size() ? (data.size() & (size - 1)) : size;
+                    auto s = start + size > data.size() ? ((sint) data.size() & (size - 1)) : size;
                     for (uint32_t j = 0; j < s; ++j) {
                         *((char *) pa + j) = data[start + j];
 #if 0
@@ -357,7 +356,7 @@ namespace clib {
             // print debug info
             if (log) {
                 printf("%04d> [%08X] %02d %.4s", cycle, pc, op,
-                       &"LEA ,IMM ,JMP ,CALL,JZ  ,JNZ ,ENT ,ADJ ,LEV ,LI  ,SI  ,LC  ,SC  ,PUSH,LOAD,"
+                       &"NOP, LEA ,IMM ,IMX ,JMP ,CALL,JZ  ,JNZ ,ENT ,ADJ ,LEV ,LI  ,SI  ,LC  ,SC  ,PUSH,LOAD,"
                         "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
                         "OPEN,READ,CLOS,PRTF,MALC,MSET,MCMP,TRAC,TRAN,EXIT"[op * 5]);
                 if (op == PUSH)
@@ -568,7 +567,7 @@ namespace clib {
                         printf("[%08X]> %08X\n", i, vmm_get<uint32_t>(i));
                     }
                     printf("unknown instruction:%d\n", op);
-                    assert(0);
+                    throw std::exception();
                     exit(-1);
                 }
             }

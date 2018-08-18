@@ -12,6 +12,16 @@ using string_t = std::string;
 template<class K, class V> using map_t = std::unordered_map<K, V>;
 
 namespace clib {
+#if __APPLE__ && __MACH__
+    using int8 = int8_t;
+    using uint8 = uint8_t;
+    using int16 = int16_t;
+    using uint16 = uint16_t;
+    using int32 = int32_t;
+    using uint32 = uint32_t;
+    using int64 = int64_t;
+    using uint64 = uint64_t;
+#else
     using int8 = signed __int8;
     using uint8 = unsigned __int8;
     using int16 = signed __int16;
@@ -20,8 +30,13 @@ namespace clib {
     using uint32 = unsigned __int32;
     using int64 = signed __int64;
     using uint64 = unsigned __int64;
+#endif
 
-#ifdef WIN32
+    // 这里暂不支持64位程序
+#if __x86_64__
+#warning "Not support x86_64"
+#endif
+#if 1
     using sint = int32;
     using uint = uint32;
     using slong = long long;
@@ -227,6 +242,7 @@ struct base_lexer_t<obj> \
     const string_t &lexer_opnamestr(operator_t);
     const string_t &lexer_errstr(error_t);
     int lexer_operatorpred(operator_t);
+    int lexer_op2ins(operator_t);
 
     extern string_t keyword_string_list[];
 
@@ -241,43 +257,7 @@ struct base_lexer_t<obj> \
 #define ERROR_STRING(t) lexer_errstr(t)
 
 #define OPERATOR_PRED(t) lexer_operatorpred(t)
-
-//----------------------------------------------------
-
-// instructions
-
-    enum ins_t {
-        LEA, IMM, JMP, CALL, JZ, JNZ, ENT, ADJ, LEV, LI, SI, LC, SC, PUSH, LOAD,
-        OR, XOR, AND, EQ, NE, LT, GT, LE, GE, SHL, SHR, ADD, SUB, MUL, DIV, MOD,
-        OPEN, READ, CLOS, PRTF, MALC, MSET, MCMP, TRAC, TRAN, EXIT
-    };
-
-    enum class_t {
-        CLASS_NULL, Num, Fun, Sys, Glo, Loc
-    };
-
-    union storage_t {
-#define DEFINE_LEXER_STORAGE(t) LEX_T(t) _##t;
-        DEFINE_LEXER_STORAGE(char)
-        DEFINE_LEXER_STORAGE(uchar)
-        DEFINE_LEXER_STORAGE(short)
-        DEFINE_LEXER_STORAGE(ushort)
-        DEFINE_LEXER_STORAGE(int)
-        DEFINE_LEXER_STORAGE(uint)
-        DEFINE_LEXER_STORAGE(long)
-        DEFINE_LEXER_STORAGE(ulong)
-        DEFINE_LEXER_STORAGE(float)
-        DEFINE_LEXER_STORAGE(double)
-#undef DEFINE_LEXER_STORAGE
-    };
-
-    struct sym_t {
-        string_t name;
-        class_t cls, _cls;
-        lexer_t type, _type;
-        storage_t value, _value;
-        LEX_T(int) ptr, _ptr;
-    };
+#define OP_INS(t) lexer_op2ins(t)
 }
 
 #endif //CMINILANG_TYPES_H

@@ -83,10 +83,10 @@ namespace clib {
 
     class cvm {
     public:
-        cvm(std::vector<LEX_T(int)>, std::vector<LEX_T(char)>);
+        explicit cvm(const std::vector<LEX_T(int)> &text, const std::vector<LEX_T(char)> &data);
         ~cvm();
 
-        int exec(int entry);
+        int exec(int entry = -1);
 
     private:
         // 申请页框

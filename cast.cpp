@@ -19,7 +19,9 @@ namespace clib {
         current = root;
     }
 
-    ast_node *cast::get_root() const {
+    ast_node *cast::get_root() {
+        if (!vars.empty())
+            vars.clear();
         return root;
     }
 
@@ -53,6 +55,19 @@ namespace clib {
         sibling->next = node->next;
         node->next = sibling;
         return sibling;
+    }
+
+    int cast::children_size(ast_node *node) {
+        if (!node || !node->child)
+            return 0;
+        node = node->child;
+        auto i = node;
+        auto n = 0;
+        do {
+            n++;
+            i = i->next;
+        } while (i != node);
+        return n;
     }
 
     ast_node *cast::add_child(ast_node *node) {
@@ -114,6 +129,21 @@ namespace clib {
         node->data._string = s;
     }
 
+    std::string cast::display_str(ast_node *node) {
+        std::stringstream ss;
+        for (auto c = node->data._string; *c != 0; c++) {
+            if (isprint(*c)) {
+                ss << *c;
+            } else {
+                if (*c == '\n')
+                    ss << "\\n";
+                else
+                    ss << ".";
+            }
+        }
+        return ss.str();
+    }
+
     void cast::reset() {
         nodes.clear();
         strings.clear();
@@ -138,10 +168,10 @@ namespace clib {
         }
     }
 
-    void cast::print(ast_node *node, int level, std::ostream &os) const {
+    void cast::print(ast_node *node, int level, std::ostream &os) {
         if (node == nullptr)
             return;
-        auto rec = [&](auto n, auto l, auto &os) { this->print(n, l, os); };
+        auto rec = [&](auto n, auto l, auto &os) { cast::print(n, l, os); };
         auto type = (ast_t) node->flag;
         switch (type) {
             case ast_root: // 根结点，全局声明
@@ -153,7 +183,7 @@ namespace clib {
                 os << "};" << std::endl;
                 break;
             case ast_enum_unit: // 枚举（等式）
-                os << std::setw(level << 2) << "";
+                os << std::setw(level * 4) << "";
                 rec(node->child, level, os); // id
                 os << " = ";
                 rec(node->child->next, level, os); // int
@@ -175,7 +205,7 @@ namespace clib {
                     os << ", ";
                 break;
             case ast_var_local:
-                os << std::setfill(' ') << std::setw(level << 2) << "";
+                os << std::setfill(' ') << std::setw(level * 4) << "";
                 rec(node->child, level, os); // type
                 os << ' ';
                 rec(node->child->next, level, os); // id
@@ -201,14 +231,14 @@ namespace clib {
                 break;
             case ast_block:
                 if (node->parent->flag == ast_block)
-                    os << std::setfill(' ') << std::setw(level << 2) << "";
+                    os << std::setfill(' ') << std::setw(level * 4) << "";
                 os << '{' << std::endl;
                 ast_recursion(node->child, level + 1, os, rec); // stmt
-                os << std::setfill(' ') << std::setw(level << 2) << "";
+                os << std::setfill(' ') << std::setw(level * 4) << "";
                 os << '}';
                 break;
             case ast_stmt:
-                os << std::setfill(' ') << std::setw(level << 2) << "";
+                os << std::setfill(' ') << std::setw(level * 4) << "";
                 ast_recursion(node->child, level, os, rec);
                 break;
             case ast_return:
@@ -292,7 +322,7 @@ namespace clib {
                     if (_block)
                         os << ' ';
                     else
-                        os << std::setfill(' ') << std::setw(level << 2) << "";
+                        os << std::setfill(' ') << std::setw(level * 4) << "";
                     os << "else";
                     auto _else = node->child->prev;
                     _block = _else->flag == ast_block;
@@ -348,18 +378,7 @@ namespace clib {
                 rec(node->child, level, os);
                 break;
             case ast_string: {
-                os << '"';
-                for (auto c = node->data._string; *c != 0; c++) {
-                    if (isprint(*c)) {
-                        os << *c;
-                    } else {
-                        if (*c == '\n')
-                            os << "\\n";
-                        else
-                            os << ".";
-                    }
-                }
-                os << '"';
+                os << '"' << display_str(node) << '"';
             }
                 break;
             case ast_char:
@@ -368,7 +387,7 @@ namespace clib {
                 else if (node->data._char == '\n')
                     os << "'\\n'";
                 else
-                    os << "'\\x" << setiosflags(std::ios::uppercase) << std::hex
+                    os << "'\\x" << std::setiosflags(std::ios::uppercase) << std::hex
                        << std::setfill('0') << std::setw(2)
                        << (unsigned int) node->data._char << '\'';
                 break;

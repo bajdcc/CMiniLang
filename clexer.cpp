@@ -150,63 +150,6 @@ LEX_T(t) clexer::get_store_##t(int index) const \
         return str.substr(last_index, index - last_index);
     }
 
-    std::string clexer::store_start() {
-        std::stringstream ss;
-        while (next() != l_end) {
-            auto s = store();
-            if (!s.empty()) {
-                ss << s;
-                ss.put(' ');
-            }
-        }
-        return ss.str();
-    }
-
-    string_t clexer::store() {
-        static char buf[52];
-        switch (type) {
-            case l_none:
-            case l_error:
-            case l_comment:
-            case l_space:
-            case l_newline:
-                return "";
-#define DEFINE_LEXER_STORAGE_GET(t, a) case l_##t: { \
-        itoa(storage._##t.size(), buf + 1, 10); \
-        storage._##t.push_back(get_##t()); \
-        buf[0] = a; \
-        return buf; \
-    }
-            DEFINE_LEXER_STORAGE_GET(char, 'c')
-            DEFINE_LEXER_STORAGE_GET(uchar, 'C')
-            DEFINE_LEXER_STORAGE_GET(short, 's')
-            DEFINE_LEXER_STORAGE_GET(ushort, 'S')
-            DEFINE_LEXER_STORAGE_GET(int, 'i')
-            DEFINE_LEXER_STORAGE_GET(uint, 'I')
-            DEFINE_LEXER_STORAGE_GET(long, 'l')
-            DEFINE_LEXER_STORAGE_GET(ulong, 'L')
-            DEFINE_LEXER_STORAGE_GET(float, 'f')
-            DEFINE_LEXER_STORAGE_GET(double, 'd')
-            DEFINE_LEXER_STORAGE_GET(string, 's')
-            DEFINE_LEXER_STORAGE_GET(identifier, 't')
-#undef DEFINE_LEXER_STORAGE_GET
-#define DEFINE_LEXER_STORAGE_GET(t, a) case l_##t: { \
-        itoa((int)get_##t(), buf + 1, 10); \
-        buf[0] = a; \
-        return buf; \
-    }
-            DEFINE_LEXER_STORAGE_GET(keyword, 'k')
-#undef DEFINE_LEXER_STORAGE_GET
-            case l_operator:
-                return str.substr(last_index, index - last_index);
-            case l_end:
-                break;
-            default:
-                break;
-        }
-        return "";
-    }
-
     bool clexer::is_type(lexer_t type) const {
         return get_type() == type;
     }

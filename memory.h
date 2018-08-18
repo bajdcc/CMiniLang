@@ -6,6 +6,7 @@
 #ifndef CMINILANG_MEMORY_H
 #define CMINILANG_MEMORY_H
 
+#include <cassert>
 #include "types.h"
 
 namespace clib {
@@ -141,6 +142,7 @@ namespace clib {
         // 创建内存池
         void _create() {
             block_head = allocator.template __alloc_array<block>(DEFAULT_ALLOC_BLOCK_SIZE);
+            assert(block_head);
             _init();
         }
 

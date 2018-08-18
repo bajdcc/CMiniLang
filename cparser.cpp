@@ -20,8 +20,6 @@ namespace clib {
         : lexer(str) {
     }
 
-    cparser::~cparser() = default;
-
     ast_node *cparser::parse() {
         // 清空词法分析结果
         lexer.reset();
@@ -32,12 +30,8 @@ namespace clib {
         return ast.get_root();
     }
 
-    ast_node *cparser::root() const {
+    ast_node *cparser::root() {
         return ast.get_root();
-    }
-
-    void cparser::ast_print(ast_node *node, std::ostream &os) {
-        ast.print(node, 0, os);
     }
 
     void cparser::next() {
@@ -559,6 +553,8 @@ namespace clib {
                 }
                 match_operator(op_semi);
             }
+
+            ast.new_child(ast_empty, false)->data._int = 1; // 标识声明与语句的分界线
 
             // statements
             while (!lexer.is_operator(op_rbrace)) {

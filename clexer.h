@@ -5,6 +5,7 @@
 #ifndef CMINILANG_LEXER_H
 #define CMINILANG_LEXER_H
 
+#include <array>
 #include <bitset>
 #include <vector>
 #include "types.h"
@@ -77,7 +78,6 @@ namespace clib {
         string_t current() const;
 
         const err_record_t& recent_error() const;
-        std::string store_start();
 
         lexer_t digit_type(lexer_t t, int i);
         bool digit_from_integer(lexer_t t, LEX_T(ulong) n);
@@ -98,8 +98,6 @@ namespace clib {
 
         int local();
         int local(int offset);
-
-        string_t store();
 
     public:
         bool is_type(lexer_t) const;
