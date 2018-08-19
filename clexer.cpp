@@ -798,7 +798,11 @@ LEX_T(t) clexer::get_store_##t(int index) const \
                     if (c2 == '=') {
                         auto p = sinOp[c];
                         if (p == 0 || p > op_logical_not) {
-                            return record_error(e_invalid_operator, 2);
+                            // 单字符操作符
+                            auto p = sinOp[c];
+                            bags._operator = (operator_t) p;
+                            move(1);
+                            return l_operator;
                         }
                         bags._operator = (operator_t) (p + 1); // 从 '?' 到 '?='
                         move(2);

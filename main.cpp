@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 {
     g_argc = argc;
     g_argv = argv;
-#if 1
+#if 0
     string_t txt = R"(
 int fibonacci(int i) {
     if (i <= 1)

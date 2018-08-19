@@ -354,7 +354,7 @@ namespace clib {
 #if 0
             assert(op <= EXIT);
             // print debug info
-            if (log) {
+            if (true) {
                 printf("%04d> [%08X] %02d %.4s", cycle, pc, op,
                        &"NOP, LEA ,IMM ,IMX ,JMP ,CALL,JZ  ,JNZ ,ENT ,ADJ ,LEV ,LI  ,SI  ,LC  ,SC  ,PUSH,LOAD,"
                         "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"

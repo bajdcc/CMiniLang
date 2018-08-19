@@ -12,7 +12,6 @@
 #define DBG 0
 
 namespace clib {
-
     string_t class_string_list[] = {
             "NotFound",
             "Enum",
@@ -72,7 +71,7 @@ namespace clib {
         switch ((ast_t) node->flag) {
 #define DEFINE_LEXER_STORAGE(t) case ast_##t: \
     emit(IMM, (LEX_T(int))(node->data._##t)); \
-    expr_level = LEX_SIZEOF(t); break;
+    expr_level = LEX_SIZEOF(t); ptr_level = 0; break;
             DEFINE_LEXER_STORAGE(char)
             DEFINE_LEXER_STORAGE(uchar)
             DEFINE_LEXER_STORAGE(short)
@@ -88,6 +87,7 @@ namespace clib {
                 emit(node->data._ins._1);
                 emit(node->data._ins._2);
                 expr_level = 8;
+                ptr_level = 0;
                 break;
             case ast_string: {
                 auto addr = data.size();
@@ -113,7 +113,8 @@ namespace clib {
             }
                 break;
             default:
-                assert(!"unsupported type");
+                printf("emit::unsupported type\n");
+                throw std::exception();
                 break;
         }
     }
@@ -179,8 +180,8 @@ namespace clib {
                     emit(LI);
                     break;
                 default:
-                    assert(!"unsupported type");
-                    break;
+                    printf("emit_deref::unsupported type\n");
+                    throw std::exception();
             }
         else
             emit(LI);
@@ -354,7 +355,7 @@ namespace clib {
     static string_t type_str(ast_node *node) {
         std::stringstream ss;
         ss << LEX_STRING(node->prev->data._type.type);
-        auto n = node->data._type.ptr;
+        auto n = node->prev->data._type.ptr;
         for (int i = 0; i < n; ++i) {
             ss << '*';
         }
@@ -364,11 +365,6 @@ namespace clib {
 
     void cgen::add_symbol(ast_node *node, class_t clazz, LEX_T(int) addr) {
         expect(expect_non_conflict_id, node);
-#if DBG
-        printf("[DEBUG] Symbol::add(\"%s %s\", %s, %d)\n",
-               type_str(node).c_str(), node->data._string,
-               CLASS_STRING(clazz).c_str(), addr);
-#endif
         sym_t sym{
                 .node = node,
                 .clazz = clazz,
@@ -376,6 +372,11 @@ namespace clib {
         };
         switch (clazz) {
             case clz_enum:
+#if DBG
+                printf("[DEBUG] Symbol::add(\"%s\", %s, %d)\n",
+                       node->data._string,
+                       CLASS_STRING(clazz).c_str(), addr);
+#endif
                 break;
             case clz_number:
                 break;
@@ -388,6 +389,9 @@ namespace clib {
                     data.push_back(0);
                 }
 #if DBG
+                printf("[DEBUG] Symbol::add(\"%s %s\", %s, %d)\n",
+                       type_str(node).c_str(), node->data._string,
+                       CLASS_STRING(clazz).c_str(), addr);
                 printf("[DEBUG] Symbol::var_global(used: %d, now: %d)\n", n, data.size());
 #endif
             }
@@ -397,15 +401,21 @@ namespace clib {
                 auto n = align4(size_id(node));
                 ebp += n;
 #if DBG
+                printf("[DEBUG] Symbol::add(\"%s %s\", %s, %d)\n",
+                       type_str(node).c_str(), node->data._string,
+                       CLASS_STRING(clazz).c_str(), addr);
                 printf("[DEBUG] Symbol::var_param(used: %d, now: %d)\n", n, ebp);
 #endif
             }
                 break;
             case clz_var_local: { // 局部变量，栈
-                sym.data = ebp_local;
                 auto n = align4(size_id(node));
                 ebp_local += n;
+                sym.data = ebp_local;
 #if DBG
+                printf("[DEBUG] Symbol::add(\"%s %s\", %s, %d)\n",
+                       type_str(node).c_str(), node->data._string,
+                       CLASS_STRING(clazz).c_str(), addr);
                 printf("[DEBUG] Symbol::var_local(used: %d, now: %d)\n", n, ebp_local);
 #endif
                 break;
@@ -542,13 +552,15 @@ namespace clib {
                             ptr_level++;
                             break;
                         case op_times: // 解引用
+                            rec(node->child); // exp
                             emit_deref();
-                            if (ptr_level > 0)
+                            if (ptr_level > 0) {
                                 ptr_level--;
+                            }
                             break;
                         default:
-                            assert(!"unsupported op");
-                            break;
+                            printf("ast_sinop::unsupported prefix op \"%s\"\n", OP_STRING(node->data._op.op).c_str());
+                            throw std::exception();
                     }
                 } else { // 后置
                     switch (node->data._op.op) {
@@ -563,16 +575,17 @@ namespace clib {
                             emit(i); // 取出左值
                             emit(PUSH); // 压入左值
                             emit(IMM, size_inc(_expr, _ptr)); // 增量到ax
-                            emit(OP_INS(node->data._op.op));
+                            auto ins = OP_INS(node->data._op.op);
+                            emit(ins);
                             emits((ins_t) i); // 存储指令，变量未修改
                             emit(PUSH); // 压入当前值
                             emit(IMM, size_inc(_expr, _ptr)); // 增量到ax
-                            emit(OP_INS(node->data._op.op)); // 仅修改ax
+                            emit(ins == ADD ? SUB : ADD); // 仅修改ax
                         }
                             break;
                         default:
-                            assert(!"unsupported op");
-                            break;
+                            printf("ast_sinop::unsupported postfix op \"%s\"\n", OP_STRING(node->data._op.op).c_str());
+                            throw std::exception();
                     }
                 }
                 break;
@@ -601,8 +614,6 @@ namespace clib {
                 } else { // 二元运算
                     switch (node->data._op.op) {
                         case op_equal:
-                        case op_plus:
-                        case op_minus:
                         case op_times:
                         case op_divide:
                         case op_bit_and:
@@ -629,6 +640,16 @@ namespace clib {
                             ptr_level = std::max(_ptr, _ptr2);
                         }
                             break;
+                        case op_logical_and:
+                        case op_logical_or: {
+                            rec(node->child); // exp1
+                            auto a = emit_op(OP_INS(node->data._op.op)); // 短路优化
+                            rec(node->child->next); // exp2
+                            emit_op(index(), a); // a = exit
+                            expr_level = 4;
+                            ptr_level = 0;
+                        }
+                            break;
                         case op_assign: {
                             rec(node->child); // lvalue
                             auto _expr = expr_level;
@@ -640,6 +661,28 @@ namespace clib {
                             emits((ins_t) i); // 存储指令
                             expr_level = _expr;
                             ptr_level = _ptr; // 还原静态分析类型
+                        }
+                            break;
+                        case op_plus:
+                        case op_minus: {
+                            rec(node->child); // exp1
+                            auto _expr = expr_level;
+                            auto _ptr = ptr_level;
+                            emit(PUSH);
+                            rec(node->child->next); // exp2
+                            auto _expr2 = expr_level;
+                            auto _ptr2 = ptr_level;
+                            if (_ptr > 0 && _ptr2 == 0) { // 指针+常量
+                                if (_expr > 1) {
+                                    emit(PUSH);
+                                    emit(IMM);
+                                    emit(_expr);
+                                    emit(MUL);
+                                }
+                            }
+                            emit(OP_INS(node->data._op.op));
+                            expr_level = std::max(_expr, _expr2);
+                            ptr_level = std::max(_ptr, _ptr2);
                         }
                             break;
                         case op_plus_assign:
@@ -668,7 +711,8 @@ namespace clib {
                         }
                             break;
                         default:
-                            break;
+                            printf("ast_binop::unsupported op \"%s\"\n", OP_STRING(node->data._op.op).c_str());
+                            throw std::exception();
                     }
                 }
             }
@@ -782,6 +826,14 @@ namespace clib {
 #endif
                         break;
                     case clz_var_param:
+                        emit(LEA, ebp - sym.data);
+                        emitl(sym.node);
+                        calc_level(sym.node); // 静态分析类型
+#if DBG
+                    printf("[DEBUG] Id::Param(\"%s\", %s, LEA %d)\n", node->data._string,
+                                CLASS_STRING(sym.clazz).c_str(), ebp - sym.data);
+#endif
+                        break;
                     case clz_var_local:
                         emit(LEA, ebp - sym.data);
                         emitl(sym.node);
@@ -801,7 +853,7 @@ namespace clib {
                 break;
             case ast_cast:
                 rec(node->child);
-                expr_level = node->data._type.type; // 修正静态分析类型
+                expr_level = size_type(node->data._type.type); // 修正静态分析类型
                 ptr_level = node->data._type.ptr;
                 break;
             case ast_char:
